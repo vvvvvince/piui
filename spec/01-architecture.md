@@ -25,7 +25,13 @@ updated: 2026-02-20
   Migrations: plain numbered SQL files applied in a transaction at boot (`server/src/db/migrations/NNN_*.sql`), tracked in a `schema_migrations` table.
 - Validation: **TypeBox** (already a pi dependency, and pi's `defineTool` uses it) + `ajv` for request bodies. Do not add zod.
 - Logging: `pino` (pretty in dev). One log line per request; agent events at `debug`.
-- Tests: `vitest` for unit/integration, `supertest`-style via `fastify.inject()`.
+- Tests: `vitest` for unit/integration, `supertest`-style via `fastify.inject()`,
+  `@testing-library/react` for components, Playwright for the two E2E flows.
+  **Development is test-first** — [20-development-method.md](20-development-method.md) is
+  normative, and its §3 test seams (scripted fake provider, temp `PIUI_HOME`, injectable
+  clock/ids/fetch, principal injection, SSE harness) are M0 deliverables. Design consequence:
+  `web_search`, `web_fetch` and HTTP tools MUST accept an injectable `fetch`, and all time and
+  id generation MUST go through injected `Clock`/`IdGen`.
 
 **Client**
 - React 18 + TypeScript + **Vite**.

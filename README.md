@@ -18,6 +18,11 @@ SDK and a JSONL RPC mode. piui wraps the SDK in an HTTP/SSE server plus a browse
 | 5 | **Agent mode** — model + profile + workspace, full agentic loop | [spec/08-agent-mode.md](spec/08-agent-mode.md) |
 | 6 | **Skills & tools management UI** | [spec/05-skills-and-tools.md](spec/05-skills-and-tools.md) |
 
+> **Development method: test-driven.** Read
+> [spec/20-development-method.md](spec/20-development-method.md) before writing any code. The
+> acceptance criteria in these specs are the test backlog, and a `spec-coverage` test fails the
+> build if any of them lacks a tagged test.
+
 ## Read the specs in this order
 
 1. [spec/00-overview.md](spec/00-overview.md) — goals, non-goals, glossary, architecture
@@ -44,6 +49,8 @@ SDK and a JSONL RPC mode. piui wraps the SDK in an HTTP/SSE server plus a browse
     enforced from V1, real multi-user in V2 (Q7 = C)
 20. [spec/19-deployment.md](spec/19-deployment.md) — Dockerfile + docker-compose stack; the
     container is the isolation model (Q10 = A)
+21. [spec/20-development-method.md](spec/20-development-method.md) — **test-driven development**
+    (requirement R1): the loop, spec-as-test-backlog, and the M0 test seams
 
 **[spec/decisions.md](spec/decisions.md)** — binding answers to the open questions. Read this
 first; it overrides anything it contradicts.
@@ -85,6 +92,8 @@ Rules for whoever edits these specs:
 ## Conventions used in these specs
 
 - **MUST / SHOULD / MAY** follow RFC 2119.
+- Acceptance criteria are numbered because tests reference them as `[<spec id>#<section>.<item>]`
+  (see requirement R1). Renumbering an acceptance list means updating its test tags.
 - `[V1]` = required for the first release. `[LATER]` = designed for, not built now.
 - Any place the spec says "pluggable", the implementation MUST define a TypeScript interface
   with exactly one implementation, so a second one can be dropped in without touching callers.

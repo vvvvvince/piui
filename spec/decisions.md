@@ -8,7 +8,7 @@ summary: >-
 covers: [decisions]
 depends_on: []
 required_by: [all]
-decisions: [Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q10]
+decisions: [Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q10, R1]
 milestones: []
 spec_version: 1
 updated: 2026-02-20
@@ -35,6 +35,12 @@ for a topic and to read dependencies first; the schema is documented in the READ
 | 8 | Model for titles/compaction | **A — conversation's model; titles from the first user message only, one trivial call** | 2026-02-20 |
 | 9 | Approval gates for dangerous commands | **Never** — answered by Q3; piui ships none | 2026-02-20 |
 | 10 | Sandboxing / containerized execution | **A — no per-run sandbox; piui itself runs in a dedicated environment. Docker image + compose are V1 deliverables** | 2026-02-20 |
+
+## Requirements (not questions)
+
+| # | Requirement | Decision | Date |
+|---|-------------|----------|------|
+| R1 | Development method | **Test-driven development**, normative in [20-development-method.md](20-development-method.md) | 2026-02-20 |
 
 ---
 
@@ -498,3 +504,69 @@ development with the strict defaults unchanged.
 - `14-credentials.md` §7.2 — the container exception to the plaintext refusal.
 - `12-milestones.md` — Docker artifacts in **M0** with acceptance; deployment docs and polish in
   M7.
+
+---
+
+## R1 — Development method → **test-driven development**
+
+**Requirement.** piui is built test-first: no production code without a failing test that
+demands it, red-green-refactor, commit at green. Normative in
+[20-development-method.md](20-development-method.md).
+
+**What makes this more than a slogan here:** the spec's acceptance criteria were already written
+as assertions, so they become the **test backlog**. Each test carries a
+`[<spec id>#<section>.<item>]` tag, and a `spec-coverage` test parses `spec/*.md`, collects every
+numbered acceptance item, and **fails if any item lacks a tagged test** or an entry in
+`test/spec-exemptions.ts` with a stated reason. That replaces a line-coverage percentage (which
+would reward testing getters) with a gate that tracks the contract. Working a milestone becomes:
+read its acceptance list → write those tests red → green them one at a time.
+
+**The decision this forces into M0.** TDD is impractical in this codebase unless the seams exist
+first, because the interesting behavior involves an LLM, a filesystem, a clock and a stream. So
+M0 grows from "skeleton" to "skeleton + harness":
+
+1. **A scripted fake model provider** — the critical one, and verified feasible against the
+   installed pi: `ModelRuntime.registerProvider()` takes a `ProviderConfigInput` with
+   `streamSimple`, and `pi-ai` exports `createAssistantMessageEventStream()` (pi's
+   `docs/custom-provider.md`). A script of `{text} | {thinking} | {toolCall} | {error} | {stall}`
+   steps, emitted in small chunks with fixed usage numbers, makes chat mode, agent loops,
+   steering, abort, retry, compaction and cost accounting testable **offline and
+   deterministically** — with tool calls running the *real* tools in a temp workspace, since that
+   is the path that actually breaks.
+2. Temp `PIUI_HOME` per test (+ a guard that fails on any access outside the temp root, so no
+   test can touch the developer's real `~/.piui` or `~/.pi`).
+3. Injectable `Clock`/`IdGen` — required for memory timestamps, session/step-up windows, idle
+   eviction, `PIUI_MAX_RUN_MINUTES`, SSE pings. No sleeping in tests.
+4. Principal injection — the only way to test `18-multi-user.md`'s authorization matrix while
+   V1 has one real user.
+5. An SSE harness with `Last-Event-ID` reconnect — the snapshot/replay/dedupe rules are the
+   subtlest behavior in the system and the likeliest silent regression.
+6. Injectable `fetch` — also the only way to test the SSRF rules in `11-security.md` (hostile
+   redirects, private-IP DNS answers, wrong content types).
+
+Items 1 and 6 are **design constraints, not test utilities**: `web_search`, `web_fetch` and HTTP
+tools must accept an injectable fetch, and all time/id generation must route through the injected
+services. Recorded in `01-architecture.md`.
+
+**Mocking policy, stated because it is the usual failure mode:** do **not** mock the pi SDK
+(mocking it would test piui's beliefs about pi rather than pi — and risk #1 is precisely that pi
+drifts), do not mock SQLite, do not mock the filesystem. Use the real ones with fakes at the
+edges. Assert on observable outcomes — HTTP responses, SSE frames, DB rows, files on disk — not
+on call counts. Snapshot tests are permitted only for rendered Markdown and diffs; API-response
+snapshots are forbidden because they pass on wrong behavior.
+
+**Exemptions, kept explicit to keep the rule credible:** visual design, branch-free glue,
+declarative artifacts (Dockerfile/compose/migrations — covered behaviorally instead), and
+third-party behavior. Plus a per-milestone **mutation spot check**: deliberately break
+`resolveTools`, path validation, the SSE dedupe rule and the authorization predicate, and confirm
+a *named* test fails.
+
+**Spec changes.**
+- **New:** `20-development-method.md` — the loop and its rules, spec-as-backlog with the
+  `spec-coverage` gate, the six M0 test seams, mocking policy, taxonomy with speed budgets,
+  recorded fixtures, exemptions, CI gates, acceptance criteria for the method itself.
+- `12-milestones.md` — preamble makes acceptance lists the test backlog; M0 retitled
+  "Skeleton + test harness (~1 day)" and gains the harness deliverables; test matrix points at
+  the method doc; definition of done requires `spec-coverage` green.
+- `01-architecture.md` — test stack expanded, plus the injectable-`fetch` / `Clock` / `IdGen`
+  design constraints that TDD imposes.

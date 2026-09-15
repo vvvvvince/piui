@@ -6,9 +6,9 @@ read_first: true
 summary: >-
   M0–M7 build sequence with per-milestone acceptance lists, the minimum test matrix, fixtures, and the V1 definition of done.
 covers: [milestones, acceptance, test-matrix, definition-of-done]
-depends_on: [00-overview, 19-deployment]
-required_by: []
-decisions: [Q1, Q2, Q3, Q4, Q7, Q10]
+depends_on: [00-overview, 19-deployment, 20-development-method]
+required_by: [20-development-method]
+decisions: [Q1, Q2, Q3, Q4, Q7, Q10, R1]
 milestones: [M0, M1, M2, M3, M4, M5, M5b, M5c, M6, M7]
 spec_version: 1
 updated: 2026-02-20
@@ -17,9 +17,21 @@ updated: 2026-02-20
 # 12 — Build order, milestones, acceptance
 
 Each milestone must end **runnable and demoable**. Do not start N+1 until N's acceptance list
-passes. Write tests as you go, not at the end.
+passes.
 
-## M0 — Skeleton (half a day)
+**Development method is test-driven — [20-development-method.md](20-development-method.md) is
+normative (requirement R1).** Consequences for how these milestones are executed:
+
+- A milestone's acceptance list **is** its test backlog. Write those tests red first, tagged
+  `[<spec id>#<section>.<item>]`, then make them green one at a time.
+- No production code without a failing test (the M0 walking skeleton is the only exception).
+- The `spec-coverage` test fails if any acceptance criterion in `spec/*.md` has no tagged test
+  and no justified exemption — so "accept" below is machine-checked, not a promise.
+- The **test seams in §3 of that document (fake model provider, temp `PIUI_HOME`, injectable
+  clock/ids, principal injection, SSE harness, injectable fetch) are M0 deliverables**. Without
+  them the later milestones cannot be driven by tests at all.
+
+## M0 — Skeleton + test harness (~1 day)
 
 - Workspaces-style npm workspaces repo (`shared`, `server`, `client`), TS strict, ESM.
 - Fastify boot, `/api/health`, pino logging, config parsing, graceful shutdown.
@@ -31,6 +43,11 @@ passes. Write tests as you go, not at the end.
   makes V2 multi-user mechanical instead of a rewrite.
 - Vite React SPA with the shell (sidebar + top bar) and a placeholder page; dev proxy to `/api`.
 - `npm run dev`, `npm run build`, `npm test`, lint all wired; README with setup steps.
+- **Test harness (R1):** vitest config for the three suites, `withTempHome()` /
+  `withWorkspace()` helpers, the temp-root access guard, injectable `Clock`/`IdGen`/`fetch`,
+  principal-minting helper, SSE harness, the scripted **fake model provider**
+  (`PIUI_FAKE_MODEL=1`), and `test/spec-coverage.test.ts` + `test/spec-exemptions.ts`
+  ([20-development-method.md](20-development-method.md) §3).
 - **Dockerfile + `docker-compose.yaml` + `.env.example` + `.dockerignore`**
   ([19-deployment.md](19-deployment.md) §§3–4). Built in M0, not M7: the container is the
   isolation model (decision Q10), so every later milestone should be exercised inside it.
@@ -175,6 +192,10 @@ plus a manual pass over `10-frontend.md` §4.
 
 ## Test matrix (minimum)
 
+Layering, speed budgets, mocking policy and the exemption list live in
+[20-development-method.md](20-development-method.md) §§4–7. The groups below are the minimum
+content.
+
 **Unit**
 - `resolveTools` for all mode/profile/memory permutations — especially "chat mode yields zero
   filesystem tools".
@@ -235,6 +256,8 @@ plus a manual pass over `10-frontend.md` §4.
 - No pi import outside `server/src/pi/**`; no raw SQL against owned tables outside the
   repository layer.
 - `npm run build` produces a single-command production start; documented in the README.
-- Zero TypeScript errors with `strict: true`; lint clean; tests green in CI.
+- Zero TypeScript errors with `strict: true`; lint clean; all suites plus `spec-coverage` green
+  in CI, and the Docker image builds ([20-development-method.md](20-development-method.md) §8).
+- Every acceptance criterion across `spec/*.md` has a tagged test or a justified exemption.
 - A first-run experience that works with nothing configured but pi credentials: seeded
   profiles, a clear prompt to create a workspace, and a working chat.

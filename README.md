@@ -18,10 +18,44 @@ SDK and a JSONL RPC mode. piui wraps the SDK in an HTTP/SSE server plus a browse
 | 5 | **Agent mode** — model + profile + workspace, full agentic loop | [spec/08-agent-mode.md](spec/08-agent-mode.md) |
 | 6 | **Skills & tools management UI** | [spec/05-skills-and-tools.md](spec/05-skills-and-tools.md) |
 
+> **Start here:** [spec/00-overview.md](spec/00-overview.md), then the
+> "Context budget" table below — it tells you which files a given milestone needs so you do
+> not load 55k tokens of spec to write a route.
+
 > **Development method: test-driven.** Read
 > [spec/20-development-method.md](spec/20-development-method.md) before writing any code. The
 > acceptance criteria in these specs are the test backlog, and a `spec-coverage` test fails the
 > build if any of them lacks a tagged test.
+
+## Context budget: what to load, and when
+
+The corpus is ~55k tokens. **Do not load it all.** Every file's frontmatter carries
+`summary`, `covers` and `depends_on` so you can load a subtree. Per-task budgets:
+
+| Task | Load | ≈ tokens |
+|------|------|----------|
+| Orientation (once) | `00-overview`, `12-milestones` §milestone list, `20-development-method` | ~6k |
+| **M0** skeleton + test harness | + `01-architecture`, `02-data-model`, `19-deployment` | ~14k |
+| **M1** auth | `06-auth`, `18-multi-user`, `09-api` §§0–2, `14-credentials` §5 | ~7k |
+| **M2** chat mode | `07-chat-mode`, `09-api`, `10-frontend`, `14-credentials`, `15-commands-and-input` §4 | ~13k |
+| **M3** web search / tools | `05-skills-and-tools` §B, `11-security` §2 | ~4k |
+| **M4** workspaces | `04-workspaces`, `09-api` §5 | ~2k |
+| **M5** profiles + agent mode | `03-profiles`, `05-skills-and-tools`, `08-agent-mode`, `17-memory` | ~9k |
+| **M5b** slash commands | `15-commands-and-input` | ~3.5k |
+| **M5c** extensions | `16-extensions` | ~3.6k |
+| **M6** skills/tools UI | `05-skills-and-tools`, `10-frontend` | ~4.5k |
+| **M7** hardening | `11-security`, `19-deployment`, `10-frontend` §4 | ~6k |
+| A single bug fix | the one file that `covers` the topic | ~2–3k |
+
+Two files are **not** implementation input:
+
+- `decisions.md` (7k) — rationale and history. Outcomes are already merged into the normative
+  files. Read its summary table only, unless you want to challenge a requirement.
+- `13-open-questions.md` (1k) — answered questions and the deliberate `[LATER]` list. Consult
+  when scoping, not when building.
+
+Within a file, blocks introduced by **"Rationale:"**, **"Reasoning:"** or **"Why:"** are
+non-normative. Skip them while implementing; read them before proposing a change.
 
 ## Read the specs in this order
 

@@ -2,7 +2,12 @@
 id: decisions
 title: Decision log
 status: binding
-read_first: true
+read_first: false
+read_when: >-
+  You want to know WHY something is the way it is, or you are tempted to deviate from a
+  normative file. Every DECISION OUTCOME is already merged into the normative specs — this file
+  is reasoning and history. Reading the summary table below is usually enough (~300 tokens);
+  the per-question sections are reference material, not implementation input.
 summary: >-
   Answers to the open questions, with reasoning and the list of spec files each decision changed. Overrides anything it contradicts.
 covers: [decisions]
@@ -22,6 +27,11 @@ spec was changed. An implementing agent MUST treat these as binding.
 Every file in `spec/` carries YAML frontmatter (`id`, `status`, `summary`, `covers`,
 `depends_on`, `required_by`, `decisions`, `milestones`). Use it to find the normative document
 for a topic and to read dependencies first; the schema is documented in the README.
+
+> **Implementers: you probably do not need this file.** The table below is the whole decision
+> set; the outcomes are already normative in the linked specs. Read a `## Qn` section only when
+> you disagree with a requirement and want to know what it was weighed against — which is
+> exactly when re-litigating is expensive.
 
 | # | Question | Decision | Date |
 |---|----------|----------|------|

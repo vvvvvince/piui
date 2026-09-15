@@ -1,0 +1,24 @@
+# cp docker-compose.override.yaml.example docker-compose.override.yaml
+# The three realistic customizations (spec/19-deployment.md §4.5). Keep only what you need.
+services:
+  piui:
+    # 1) Publish beyond loopback — ONLY behind a TLS-terminating reverse proxy.
+    #    Unset PIUI_INSECURE_TRANSPORT_OK once TLS is in front of piui.
+    # ports:
+    #   - "0.0.0.0:8787:8787"
+    # environment:
+    #   PIUI_INSECURE_TRANSPORT_OK: ""
+
+    # 2) PUID/PGID remapping so files the agent writes into ./workspaces are owned by you.
+    #    (Default: uid 10001. `chown -R 10001:10001 ./workspaces` is the simpler alternative.)
+    # user: "1000:1000"
+
+    # 3) A derived image with extra tooling the agent needs:
+    #      # Dockerfile.custom
+    #      FROM piui:latest
+    #      USER root
+    #      RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
+    #      USER piui
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile.custom

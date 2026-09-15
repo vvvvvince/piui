@@ -1,37 +1,38 @@
 {
-  "name": "piui",
-  "private": true,
-  "type": "module",
-  "version": "0.1.0",
-  "engines": {
-    "node": ">=22"
-  },
-  "workspaces": [
-    "shared",
-    "server",
-    "client"
-  ],
-  "scripts": {
-    "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "npm -w @piui/server run dev",
-    "dev:client": "npm -w @piui/client run dev",
-    "build": "npm -w @piui/shared run build && npm -w @piui/client run build && npm -w @piui/server run build",
-    "start": "node server/dist/index.js",
-    "test": "vitest run",
-    "test:unit": "vitest run --project unit",
-    "test:int": "vitest run --project integration",
-    "test:client": "vitest run --project client",
-    "test:e2e": "playwright test",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write .",
-    "typecheck": "tsc -b --noEmit false --dry || tsc -b",
-    "fixtures:record": "node --experimental-strip-types server/test/fixtures/record.ts"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.3.14",
-    "@types/node": "^22.10.2",
-    "concurrently": "^9.1.2",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.5"
-  }
+	"name": "piui",
+	"private": true,
+	"type": "module",
+	"version": "0.1.0",
+	"engines": {
+		"node": ">=22"
+	},
+	"workspaces": [
+		"shared",
+		"server",
+		"client"
+	],
+	"scripts": {
+		"dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
+		"dev:server": "npm -w @piui/server run dev",
+		"dev:client": "npm -w @piui/client run dev",
+		"build": "npm -w @piui/shared run build && npm -w @piui/client run build && npm -w @piui/server run build",
+		"start": "node server/dist/index.js",
+		"test": "vitest run",
+		"test:unit": "vitest run --project unit",
+		"test:int": "vitest run --project integration",
+		"test:client": "vitest run --project client",
+		"test:e2e": "playwright test",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"typecheck": "npm -w @piui/shared run build && tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit",
+		"fixtures:record": "node --experimental-strip-types server/test/fixtures/record.ts"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.3.14",
+		"@types/node": "^22.10.2",
+		"concurrently": "^9.1.2",
+		"typescript": "^5.7.3",
+		"vitest": "^3.0.5",
+		"vite": "^6.0.11"
+	}
 }

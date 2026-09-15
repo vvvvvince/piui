@@ -1,0 +1,33 @@
+// Integration-test app: temp home + built Fastify instance, torn down together.
+import { buildServer, type PiuiServer } from "../../src/http/server.js";
+import { createTempHome, type TempHome, type TempHomeOptions } from "./temp-home.js";
+
+export interface TestApp extends TempHome {
+	app: PiuiServer;
+}
+
+export async function createTestApp(options: TempHomeOptions = {}): Promise<TestApp> {
+	const home = createTempHome(options);
+	const app = await buildServer(home.ctx);
+	await app.ready();
+	return {
+		...home,
+		app,
+		cleanup() {
+			void app.close();
+			home.cleanup();
+		},
+	};
+}
+
+export async function withTestApp<T>(
+	fn: (app: TestApp) => Promise<T> | T,
+	options: TempHomeOptions = {},
+): Promise<T> {
+	const app = await createTestApp(options);
+	try {
+		return await fn(app);
+	} finally {
+		app.cleanup();
+	}
+}

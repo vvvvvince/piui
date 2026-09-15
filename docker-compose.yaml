@@ -1,0 +1,43 @@
+# spec/19-deployment.md §4 — must work with `cp .env.example .env && docker compose up -d`.
+services:
+  piui:
+    image: ${PIUI_IMAGE:-piui:latest}
+    build: .
+    restart: unless-stopped
+    # Loopback-only by default. Publishing this beyond 127.0.0.1 without TLS is a footgun.
+    ports:
+      - "127.0.0.1:${PIUI_PUBLISH_PORT:-8787}:8787"
+    environment:
+      TZ: ${TZ:-UTC}
+      PIUI_HOME: /data
+      PIUI_HOST: 0.0.0.0             # inside the container only
+      PIUI_CONTAINER: "1"
+      PIUI_ALLOW_REMOTE: "1"         # required because we bind 0.0.0.0 inside the container
+      PIUI_INSECURE_TRANSPORT_OK: "1"  # safe: the port is published to 127.0.0.1 only (§5)
+      PIUI_SESSION_SECRET: ${PIUI_SESSION_SECRET:?set PIUI_SESSION_SECRET in .env (see .env.example)}
+      PIUI_USERNAME: ${PIUI_USERNAME:-test}
+      PIUI_PASSWORD: ${PIUI_PASSWORD:-test}
+      PIUI_PI_AUTH_PATH: /data/auth.json
+      PIUI_WORKSPACE_ROOTS: /workspaces
+      PIUI_SEARCH_PROVIDER: ${PIUI_SEARCH_PROVIDER:-none}
+      PIUI_SEARCH_API_KEY: ${PIUI_SEARCH_API_KEY:-}
+      PIUI_SEARXNG_URL: ${PIUI_SEARXNG_URL:-}
+      PIUI_MAX_CONCURRENT_RUNS: ${PIUI_MAX_CONCURRENT_RUNS:-4}
+      PIUI_MAX_RUN_MINUTES: ${PIUI_MAX_RUN_MINUTES:-30}
+    volumes:
+      - piui-data:/data              # db, profiles, skills, extensions, sessions, auth.json
+      - ./workspaces:/workspaces     # the agent's working folders — yours to inspect on the host
+    # Deliberately NOT present: /var/run/docker.sock, host network, privileged, host paths.
+
+  searxng:
+    image: searxng/searxng:latest
+    profiles: ["search"]
+    restart: unless-stopped
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+    volumes:
+      - searxng:/etc/searxng
+
+volumes:
+  piui-data:
+  searxng:

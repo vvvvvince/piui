@@ -5,10 +5,10 @@
 and a JSONL RPC mode. piui wraps the SDK in an HTTP/SSE server plus a browser client, so you can
 run chats and full agentic tasks from a browser instead of a terminal.
 
-> **Status: not implemented yet.** This repository currently contains the specification
-> (`spec/`) and the implementation plan (`plan/`) — no code. The sections below marked
-> *(M7)* are placeholders for the product documentation that the spec requires to exist by
-> then; do not delete the headings, fill them in.
+> **Status: M0 complete (skeleton + test harness).** The app boots, migrates its database,
+> serves the SPA shell and ships in a container; chat and agent modes arrive in M2/M5. The
+> sections below marked *(M7)* are placeholders for the product documentation that the spec
+> requires to exist by then; do not delete the headings, fill them in.
 
 ## Features
 
@@ -27,17 +27,44 @@ run chats and full agentic tasks from a browser instead of a terminal.
 |------|----------|
 | [`spec/`](spec/README.md) | The specification corpus. **Authoritative.** Start at [`spec/README.md`](spec/README.md) for reading order and the per-task context budget. |
 | [`plan/`](plan/README.md) | The implementation plan derived from the spec: milestones, spikes, risks, checklist. |
-| `shared/`, `server/`, `client/` | *(M0)* the implementation. |
+| `shared/`, `server/`, `client/` | The implementation: shared DTOs, Fastify server, React SPA. |
 | `docs/` | *(M7)* `deployment.md`, `adding-a-provider.md`. |
 
 ## Getting started
 
-*(M0 — replace with real setup steps: prerequisites, `npm install`, `npm run dev`, `npm test`.)*
+Prerequisites: **Node ≥ 22** and npm 9+ (Docker optional, see below).
 
-## Install with Docker *(M7 — leads with Docker per `spec/19-deployment.md`)*
+```bash
+npm install
+npm run dev        # server on :8787, Vite on :5173 (proxies /api)
+npm test           # unit + integration + component suites, offline, ~2 s
+npm run typecheck  # strict tsc across shared/server/client
+npm run lint       # biome (use `npm run lint:fix` to apply)
+npm run build      # shared/dist, client/dist, server/dist
+node server/dist/index.js   # production: one port, serves the built SPA
+```
 
-*(M7 — `cp .env.example .env && docker compose up -d`, upgrade, backup, reset. Full narrative in
-`docs/deployment.md`.)*
+State lives in `$PIUI_HOME` (default `~/.piui`): `piui.db`, `agent/` (pi sessions),
+`profiles/`, `skills/`, `prompts/`, `extensions/`, `uploads/`, `scratch/`, `logs/`.
+
+Development is **test-first** — see [`spec/20-development-method.md`](spec/20-development-method.md).
+The M0 harness gives you: `withTempHome()`, `withWorkspace()`, a fake `Clock`/`IdGen`,
+principal minting, an SSE collector, and a scripted fake model provider that drives a real
+`AgentSession` with no network and no credentials.
+
+## Install with Docker
+
+```bash
+cp .env.example .env     # then set PIUI_SESSION_SECRET (openssl rand -hex 32)
+docker compose up -d     # http://127.0.0.1:8787
+```
+
+The container runs as uid 10001, carries `git`/`ripgrep`/`less` and nothing heavier, and keeps
+its state in the `piui-data` volume; `./workspaces` is bind-mounted so the files the agent
+writes stay visible on the host. Behind a corporate proxy, build with
+`docker build --network=host --build-arg HTTP_PROXY=$http_proxy --build-arg HTTPS_PROXY=$https_proxy -t piui:latest .`
+
+*(M7 — upgrade, backup and reset narrative moves to `docs/deployment.md`.)*
 
 ## Configuration *(M7)*
 

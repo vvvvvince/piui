@@ -19,33 +19,33 @@ updated: 2026-02-20
 Rule for every line below: **failing test first**, then code, then refactor, commit at green.
 
 ## Spikes
-- [ ] S1 fake model provider feasible (`ModelRuntime.registerProvider` + `createAssistantMessageEventStream`) — **blocks everything**
-- [ ] S2 `DefaultResourceLoader` overrides + ambient suppression
-- [ ] S3 `createAgentSession` shape + `SettingsManager.inMemory`
-- [ ] S4 `AgentSessionEvent` union
-- [ ] S5 session `.jsonl` + `SessionManager`
-- [ ] S6 credentials / `AuthFlow` surface
-- [ ] S7 steer / followUp / abort / preflight
-- [ ] S8 skill commands + prompt templates
-- [ ] S9 `bindExtensions` + `additionalExtensionPaths`
-- [ ] S10 `defineTool` + injectable fetch · S11 built-in tool names · S12 usage/cost accessors
+- [x] S1 fake model provider feasible (`ModelRuntime.registerProvider` + `createAssistantMessageEventStream`) — **blocks everything**
+- [x] S2 `DefaultResourceLoader` overrides + ambient suppression
+- [x] S3 `createAgentSession` shape + `SettingsManager.inMemory`
+- [x] S4 `AgentSessionEvent` union
+- [x] S5 session `.jsonl` + `SessionManager`
+- [ ] S6 credentials / `AuthFlow` surface (M2)
+- [x] S7 steer / followUp / abort / preflight (typings verified; behavior re-checked in M2)
+- [ ] S8 skill commands + prompt templates (M5b)
+- [ ] S9 `bindExtensions` + `additionalExtensionPaths` (M5c)
+- [x] S10 `defineTool` + injectable fetch · S11 built-in tool names · S12 usage/cost accessors
 
 ## M0 — skeleton + harness
-- [ ] npm workspaces, TS strict, ESM, lint/format, scripts
-- [ ] `shared/src/{domain,events,api}.ts` from `02-data-model` §§3–5
-- [ ] `config.ts` frozen, no `process.env` elsewhere (grep test)
-- [ ] SQLite open + migration runner + `001_init.sql` (full DDL + seeded `local` admin)
-- [ ] repository layer with the two scoping predicates; no raw SQL in routes (grep test)
-- [ ] Fastify boot, pino, error envelope, `GET /api/health`, graceful shutdown
-- [ ] Vite SPA shell + dev proxy
-- [ ] `withTempHome` / `withWorkspace` / temp-root access guard
-- [ ] injectable `Clock` / `IdGen` / `fetch`
-- [ ] principal-minting helper
-- [ ] SSE harness
-- [ ] scripted fake model provider (`PIUI_FAKE_MODEL=1`)
-- [ ] `spec-coverage.test.ts` + `spec-exemptions.ts`
-- [ ] Dockerfile, compose, `.dockerignore`, `.env.example`, override example
-- [ ] **Gate:** M0 acceptance + mutation spot-check
+- [x] npm workspaces, TS strict, ESM, lint/format, scripts
+- [x] `shared/src/{domain,events,api}.ts` from `02-data-model` §§3–5
+- [x] `config.ts` frozen, no `process.env` elsewhere (grep test)
+- [x] SQLite open + migration runner + `001_init.sql` (full DDL + seeded `local` admin)
+- [x] repository layer with the two scoping predicates; no raw SQL in routes (grep test)
+- [x] Fastify boot, pino, error envelope, `GET /api/health`, graceful shutdown
+- [x] Vite SPA shell + dev proxy
+- [x] `withTempHome` / `withWorkspace` / temp-root access guard
+- [x] injectable `Clock` / `IdGen` / `fetch`
+- [x] principal-minting helper
+- [x] SSE harness
+- [x] scripted fake model provider (`PIUI_FAKE_MODEL=1`)
+- [x] `spec-coverage.test.ts` + `spec-exemptions.ts`
+- [x] Dockerfile, compose, `.dockerignore`, `.env.example`, override example
+- [x] **Gate:** M0 acceptance + mutation spot-check
 
 ## M1 — auth
 - [ ] `AuthProvider` + `StaticAuthProvider`, cookie sessions, guard

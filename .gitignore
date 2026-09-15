@@ -6,3 +6,6 @@ dist/
 plan/spikes/scratch/
 test-results/
 playwright-report/
+*.tsbuildinfo
+workspaces/
+.env

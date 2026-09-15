@@ -6,9 +6,9 @@ read_first: true
 summary: >-
   M0–M7 build sequence with per-milestone acceptance lists, the minimum test matrix, fixtures, and the V1 definition of done.
 covers: [milestones, acceptance, test-matrix, definition-of-done]
-depends_on: [00-overview]
+depends_on: [00-overview, 19-deployment]
 required_by: []
-decisions: [Q1, Q2, Q3, Q4, Q7]
+decisions: [Q1, Q2, Q3, Q4, Q7, Q10]
 milestones: [M0, M1, M2, M3, M4, M5, M5b, M5c, M6, M7]
 spec_version: 1
 updated: 2026-02-20
@@ -31,10 +31,14 @@ passes. Write tests as you go, not at the end.
   makes V2 multi-user mechanical instead of a rewrite.
 - Vite React SPA with the shell (sidebar + top bar) and a placeholder page; dev proxy to `/api`.
 - `npm run dev`, `npm run build`, `npm test`, lint all wired; README with setup steps.
+- **Dockerfile + `docker-compose.yaml` + `.env.example` + `.dockerignore`**
+  ([19-deployment.md](19-deployment.md) §§3–4). Built in M0, not M7: the container is the
+  isolation model (decision Q10), so every later milestone should be exercised inside it.
 
 **Accept:** `npm run dev` serves the SPA, `GET /api/health` returns `ok`, the db file is
 created with all tables, `npm run build && node server/dist/index.js` serves the built SPA on
-one port.
+one port, and `cp .env.example .env && docker compose up -d` yields a healthy container serving
+the same app (`19-deployment.md` §9 items 1, 2, 6, 7, 9).
 
 ## M1 — Auth (Feature 2)
 
@@ -157,7 +161,12 @@ convenient.
 - Global `/api/events` channel; live sidebar badges.
 - Export (`md`/`json`/`html`), compaction endpoint + "Compact now".
 - Empty/loading/error/disconnected states everywhere; command palette; a11y pass; light theme.
-- Docs: README (install, env, security warning, screenshots), `docs/adding-a-provider.md`.
+- Docs: README (Docker-first install, env table, security/trust-model warning, screenshots),
+  `docs/deployment.md` (upgrade, backup, reset, derived images, bare metal),
+  `docs/adding-a-provider.md`.
+- Deployment polish: multi-arch CI build, SearXNG compose profile,
+  `docker-compose.override.yaml.example`, health/posture surfacing in Settings → About
+  ([19-deployment.md](19-deployment.md) §9 items 3–5, 8, 10–12).
 
 **Accept:** `11-security.md` items verifiable by test (headers, SSRF, traversal, rate limits),
 plus a manual pass over `10-frontend.md` §4.

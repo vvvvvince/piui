@@ -42,6 +42,8 @@ SDK and a JSONL RPC mode. piui wraps the SDK in an HTTP/SSE server plus a browse
 18. [spec/17-memory.md](spec/17-memory.md) — memory file format + phased evolution (Q4 = D)
 19. [spec/18-multi-user.md](spec/18-multi-user.md) — authorization model: ownership + roles
     enforced from V1, real multi-user in V2 (Q7 = C)
+20. [spec/19-deployment.md](spec/19-deployment.md) — Dockerfile + docker-compose stack; the
+    container is the isolation model (Q10 = A)
 
 **[spec/decisions.md](spec/decisions.md)** — binding answers to the open questions. Read this
 first; it overrides anything it contradicts.

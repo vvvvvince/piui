@@ -8,7 +8,7 @@ summary: >-
 covers: [rest-api, sse, error-codes, pagination, uploads]
 depends_on: [02-data-model, 06-auth, 18-multi-user]
 required_by: [10-frontend]
-decisions: [Q1, Q2, Q3, Q7]
+decisions: [Q1, Q2, Q3, Q7, Q10]
 milestones: [M1, M2, M4, M5, M6]
 spec_version: 1
 updated: 2026-02-20
@@ -56,7 +56,13 @@ Codes used: `unauthenticated`, `invalid_credentials`, `csrf_check_failed`, `forb
 ## 1. Health & meta
 
 ### `GET /api/health`
-`200 { ok: true, version: "x.y.z", piVersion: "0.85.1", defaultCredentials: boolean }`
+```json
+{ "ok": true, "version": "x.y.z", "piVersion": "0.85.1",
+  "defaultCredentials": true, "container": true, "insecureTransportOk": true }
+```
+`container` and `insecureTransportOk` reflect `PIUI_CONTAINER` / `PIUI_INSECURE_TRANSPORT_OK`
+and are rendered on the Settings/About page so the deployment posture is never guesswork
+([19-deployment.md](19-deployment.md) §5).
 
 ### `GET /api/meta`
 ```json

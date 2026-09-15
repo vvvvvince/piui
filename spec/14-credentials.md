@@ -7,7 +7,7 @@ summary: >-
 covers: [provider-credentials, auth-flow, api-keys, step-up, secret-hygiene]
 depends_on: [06-auth, 09-api]
 required_by: [10-frontend]
-decisions: [Q1, Q7]
+decisions: [Q1, Q7, Q10]
 milestones: [M1, M2]
 spec_version: 1
 updated: 2026-02-20
@@ -329,6 +329,12 @@ Additions to `11-security.md` §3:
    arrive over HTTPS (no TLS, no `X-Forwarded-Proto: https`), credential-write routes MUST
    return `403 insecure_transport` — never accept a pasted API key over plaintext off-host.
    The UI surfaces this as a disabled "Add key" button with an explanation.
+   **Container exception:** `PIUI_INSECURE_TRANSPORT_OK=1` overrides this refusal. It exists
+   because inside a container every request arrives from the Docker bridge and therefore looks
+   remote, which would otherwise make key entry impossible at `http://127.0.0.1:8787`. The
+   shipped compose file sets it and publishes the port to loopback only
+   ([19-deployment.md](19-deployment.md) §§5–6). Unsetting it restores the strict behavior, which
+   is required when publishing beyond loopback without TLS termination.
 3. Request bodies for these routes MUST be excluded from request logging entirely (route-level
    opt-out, not field redaction — a `secret` prompt answer can arrive under any field name).
 4. Error messages from `login()` MUST be passed through a sanitizer that strips anything

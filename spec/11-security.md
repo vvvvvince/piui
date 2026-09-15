@@ -6,8 +6,8 @@ summary: >-
   Threat model, input handling, secrets, HTTP hardening, DoS self-protection, privacy, audit log, error discipline.
 covers: [threat-model, ssrf, path-traversal, headers, csp, rate-limits, audit-log]
 depends_on: [09-api]
-required_by: []
-decisions: [Q1, Q3, Q7]
+required_by: [19-deployment]
+decisions: [Q1, Q3, Q7, Q10]
 milestones: [M7]
 spec_version: 1
 updated: 2026-02-20
@@ -34,7 +34,14 @@ running the server**. There is no sandbox in V1. Therefore:
   API only — not the filesystem. Roles prevent accidents and config tampering, not a determined
   insider. The README MUST say: *give piui accounts only to people you would give a shell
   account to.* Normative detail: [18-multi-user.md](18-multi-user.md) §6.
-- `[LATER]` containerized execution (see pi's `containerization.md`) as the real fix.
+- **Decision Q10 = A**: piui implements **no per-run sandboxing**, ever. The mitigation is
+  deployment-level — run the whole app in a dedicated environment (the shipped Docker image and
+  compose stack, [19-deployment.md](19-deployment.md)) whose breakage costs nothing. The
+  container is the isolation model, which is why shipping it is a V1 deliverable and why
+  dangerous tools need no gating.
+- The compose file MUST NOT mount the Docker socket, host network, or sensitive host paths, and
+  the README MUST explain why: those mounts convert the container from a boundary into a
+  formality.
 
 ## 2. Input handling
 

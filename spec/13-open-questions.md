@@ -7,7 +7,7 @@ summary: >-
 covers: [open-questions, later-list, risks]
 depends_on: []
 required_by: []
-decisions: [Q8, Q10]
+decisions: []
 milestones: []
 spec_version: 1
 updated: 2026-02-20
@@ -15,9 +15,11 @@ updated: 2026-02-20
 
 # 13 — Open questions & deliberate deferrals
 
-## A. Questions for the spec owner (answer before or during M2/M5)
+## A. Questions for the spec owner
 
-Answered questions move to [decisions.md](decisions.md) — read it first; it is binding.
+**All ten are answered.** The full reasoning for each lives in
+[decisions.md](decisions.md) — read it first; it is binding. This section is kept as the
+historical record of what was asked and what the default assumptions were.
 
 1. ~~**Provider credentials in the UI**~~ — **ANSWERED: Option B.** API-key management in the
    UI with step-up re-auth and a kill switch; OAuth deferred. See
@@ -47,14 +49,16 @@ Answered questions move to [decisions.md](decisions.md) — read it first; it is
    checks are enforced from V1, users/auth-providers/sharing UI land in V2. See
    [decisions.md](decisions.md#q7--multi-user--option-c-plan-it-enforce-the-model-from-v1) and
    [18-multi-user.md](18-multi-user.md).
-8. **Model for titles and compaction** — use the conversation's model (simple, costly) or a
-   configured cheap model (`PIUI_TITLE_MODEL`)? Spec supports both; default is the
-   conversation's model.
+8. ~~**Model for titles and compaction**~~ — **ANSWERED: Option A.** Conversation's model for
+   both; the titler is one trivial call over the first user message only. See
+   [decisions.md](decisions.md#q8--titles-and-compaction-model--option-a-with-a-deliberately-trivial-titler)
+   and [08-agent-mode.md](08-agent-mode.md) §7.
 9. ~~**Approval gates for dangerous commands**~~ — **ANSWERED by Q3: never.** piui ships no
    tool-call confirmation logic. Gating is a user-installed extension's job.
-10. **Sandboxing** — should agent mode eventually run pi inside a container (pi documents
-    containerization)? That changes `AgentRunner` from in-process SDK to per-conversation
-    subprocess/RPC. The architecture keeps it possible; nothing in V1 implements it.
+10. ~~**Sandboxing**~~ — **ANSWERED: Option A, never.** No per-run sandbox; piui itself runs in a
+    dedicated environment, and the Docker image + compose stack are V1 deliverables. See
+    [decisions.md](decisions.md#q10--sandboxing--option-a-no-per-run-sandbox-deploy-into-a-dedicated-environment)
+    and [19-deployment.md](19-deployment.md).
 
 ## B. Deliberate `[LATER]` list (do not build now, do not design them out)
 
@@ -72,7 +76,7 @@ Answered questions move to [decisions.md](decisions.md) — read it first; it is
 | Per-conversation chat instructions (Q6 option B) | a `conversations.instructions` column + the existing chat prompt composer |
 | Scoped (per profile × workspace) memory | `memory_append({ scope })` + a second injected block + `<profileDir>/memory/<workspace-slug>.md`; no migration ([17-memory.md](17-memory.md) §6) |
 | Multi-user: user CRUD, htpasswd/OIDC providers, sharing UI, per-user credentials & quotas | [18-multi-user.md](18-multi-user.md) §7 |
-| Container/remote execution | `AgentRunner` interface |
+
 | Trash management UI | `$PIUI_HOME/trash/` + a maintenance endpoint |
 | Voice input / TTS | none needed |
 

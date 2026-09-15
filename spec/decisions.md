@@ -8,7 +8,7 @@ summary: >-
 covers: [decisions]
 depends_on: []
 required_by: [all]
-decisions: [Q1, Q2, Q3, Q4, Q5, Q6, Q7]
+decisions: [Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q10]
 milestones: []
 spec_version: 1
 updated: 2026-02-20
@@ -32,9 +32,9 @@ for a topic and to read dependencies first; the schema is documented in the READ
 | 5 | Per-workspace memory | **A — per profile only; scoped memory designed as a pure addition** | 2026-02-20 |
 | 6 | Chat-mode personality | **A — no persona in chat mode; use a capability-free profile in agent mode** | 2026-02-20 |
 | 7 | Multi-user | **C — real multi-user planned; ownership + roles enforced from V1, users/UI in V2** | 2026-02-20 |
-| 8 | Model for titles/compaction | *open* | |
+| 8 | Model for titles/compaction | **A — conversation's model; titles from the first user message only, one trivial call** | 2026-02-20 |
 | 9 | Approval gates for dangerous commands | **Never** — answered by Q3; piui ships none | 2026-02-20 |
-| 10 | Sandboxing / containerized execution | *open* | |
+| 10 | Sandboxing / containerized execution | **A — no per-run sandbox; piui itself runs in a dedicated environment. Docker image + compose are V1 deliverables** | 2026-02-20 |
 
 ---
 
@@ -392,3 +392,109 @@ columns and tables.
 - `11-security.md` — the not-a-security-boundary statement.
 - `12-milestones.md` — repository layer + seeded admin in M0, authorization in M1, a new
   authorization test group, and the no-raw-SQL rule in the definition of done.
+
+---
+
+## Q8 — Titles and compaction model → **Option A, with a deliberately trivial titler**
+
+**Decision.** Both auto-generated calls use the **conversation's model**. No cheap-model split.
+The title is generated from the **first user message only**, by one small direct model call.
+
+**The arithmetic that settled it** (raised correctly during review): a title call is ~500 input
++ ~10 output tokens. At $3/$15 per Mtok that is ~$0.0017; at Opus-class $5/$25 it is ~$0.003 —
+a dollar per few hundred conversations, against agent runs that burn 100k+ tokens each. Routing
+titles to a cheap model optimizes rounding error while adding a setting, a second model
+resolution path, and a failure mode.
+
+**Where the real risk was, and how it is removed.** The cost driver is *input size*, not model
+price: if the titler were fed the "first exchange" in agent mode it could ingest a `read` of a
+large file or 2000 lines of `bash` output — 30k tokens, ~$0.09 a title, 50× worse, caused by
+sloppy input construction rather than model choice. Eliminated by construction: the titler sees
+**only the first user message**, truncated to 1000 characters. Tool calls, tool results,
+thinking blocks and the assistant reply are never sent.
+
+**The mechanic, kept simple on request:**
+
+- fires as soon as the first user message is **accepted** — not after the assistant answers —
+  fire-and-forget, never blocking the run
+- a **direct `ModelRuntime.completeSimple()` call**, not an `AgentSession`: no session, no tools,
+  no extensions, no persistence, no compaction
+- one user message: *"Write a title of at most 6 words … reply with the title only"*,
+  `maxTokens: 32`, thinking off, 10 s timeout, **no retry**
+- post-process: first line, strip quotes/trailing period/`Title:` prefix, cut to 48 chars
+- fallback on any failure (error, timeout, empty, image-only message): first 48 chars of the
+  user's message, silently
+- `PIUI_TITLE_MODEL=provider/id` remains as an unused-by-default escape hatch (one line)
+- usage is added to `conversations.cost_total`/`tokens_total` and labelled "auxiliary" in the
+  Usage panel, since it is piui's call and pi's session stats do not include it
+
+**Compaction** stays on the conversation's model: pi already owns that call, and the summary is
+load-bearing for the remainder of a long run — exactly the case where a weaker model would be
+false economy. If a compaction bill ever surprises, the lever is pi's compaction settings, not a
+piui model override.
+
+**Spec changes.** `08-agent-mode.md` §7 rewritten (trigger, direct-call mechanic, prompt, caps,
+post-processing, fallback, cost accounting, `titleLocked`); `07-chat-mode.md` §3 points at it
+with the first-message-only rule made explicit. No API or schema change.
+
+---
+
+## Q10 — Sandboxing → **Option A (no per-run sandbox; deploy into a dedicated environment)**
+
+**Decision.** piui implements **no per-run sandboxing**, now or later. The `AgentRunner` stays
+in-process against the pi SDK. The mitigation is deployment-level: piui runs in a **dedicated
+environment** whose breakage costs nothing. Consequently piui **ships a Dockerfile and an
+off-the-shelf `docker-compose.yaml` as V1 deliverables**, specified in
+[19-deployment.md](19-deployment.md).
+
+**Why this is the right trade here.** Containerizing *execution* would convert the in-process
+SDK integration — the single reason piui is simple — into an IPC protocol (pi RPC per
+conversation, tool-output streaming across a process boundary, image/mount/network management).
+That complexity buys protection against untrusted input, which this deployment does not have.
+Containerizing the *application* gets the same practical benefit (a wrecked filesystem is
+`docker compose down -v`) for the price of a Dockerfile.
+
+**This closes the loop on three earlier caveats**, which were all conditional on the execution
+model: dangerous tools need no gating (Q3), in-UI API keys are as safe as the container (Q1), and
+extension install is as safe as the container (Q3). The container **is** the isolation model —
+which is precisely why it is built in **M0**, not M7, so every later milestone is exercised
+inside it.
+
+**What it still does not fix:** multi-user isolation. One container = one process = one uid, so
+`18-multi-user.md` §6 stands unchanged — piui accounts remain shell-equivalent trust. The compose
+file must not mount the Docker socket, host network, or sensitive host paths, and the README must
+explain why those mounts turn the boundary into a formality.
+
+**Two spec conflicts the container forced into the open** (both resolved in
+`19-deployment.md` §5, and worth knowing because they would otherwise surface as "the container
+serves nothing" and "I cannot add an API key"):
+
+1. `PIUI_HOST` refuses `0.0.0.0` without `PIUI_ALLOW_REMOTE=1` — but binding `0.0.0.0` inside a
+   container is correct, since the network namespace is the boundary and publishing is Docker's
+   job. New `PIUI_CONTAINER=1` downgrades the alarming boot banner to an info line, because the
+   warning's claim would be false.
+2. Credential writes are refused on plaintext when remote-reachable — but in a container every
+   request arrives from the Docker bridge and *looks* remote, which would break key entry even at
+   `http://127.0.0.1:8787`. New `PIUI_INSECURE_TRANSPORT_OK=1` is an explicit operator
+   acknowledgement, set by the shipped compose file, which publishes to loopback only. Both flags
+   are reported by `/api/health` and shown in Settings → About so the posture is never guesswork.
+
+**Deployment shape.** Multi-stage `node:22-bookworm-slim` (not Alpine — pi's `bash` tool expects
+GNU userland), non-root uid 10001, `tini` as PID 1 so `SIGTERM` reaches the graceful shutdown,
+`git`/`ripgrep`/`less` only — heavier toolchains belong in a documented three-line derived image.
+Two storage locations on purpose: `/data` as a **named volume** (piui's opaque state, including
+`auth.json`) and `./workspaces` as a **bind mount**, so the code the agent writes stays visible
+and git-usable on the host, and `down -v` never destroys it. Optional bundled **SearXNG** behind
+a compose profile makes self-hosted web search one command away. Bare metal stays supported for
+development with the strict defaults unchanged.
+
+**Spec changes.**
+- **New:** `19-deployment.md` — Dockerfile, compose stack, volume/permission rules, container
+  transport exceptions, credential bootstrapping in a container, upgrade/backup/reset/logging,
+  bare-metal notes, 12 acceptance criteria.
+- `01-architecture.md` — `PIUI_CONTAINER`, `PIUI_INSECURE_TRANSPORT_OK`.
+- `09-api.md` — `/api/health` reports `container` and `insecureTransportOk`.
+- `11-security.md` — no-sandbox-ever statement, container-as-isolation-model, forbidden mounts.
+- `14-credentials.md` §7.2 — the container exception to the plaintext refusal.
+- `12-milestones.md` — Docker artifacts in **M0** with acceptance; deployment docs and polish in
+  M7.

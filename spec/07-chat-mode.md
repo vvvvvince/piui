@@ -8,7 +8,7 @@ summary: >-
 covers: [chat-mode, system-prompt, web-search-ui, scratch-cwd]
 depends_on: [01-architecture, 05-skills-and-tools]
 required_by: []
-decisions: [Q2, Q6]
+decisions: [Q2, Q6, Q8]
 milestones: [M2, M3]
 spec_version: 1
 updated: 2026-02-20
@@ -108,8 +108,9 @@ and when disabled:
 - A **Sources** footer: the client collects URLs from `web_search`/`web_fetch` tool blocks of
   the current assistant message and renders favicon + domain chips under the answer, even if
   the model forgot to cite.
-- Title: after the first assistant message completes, the server generates a <= 48-char title
-  (see `08-agent-mode.md` §7 — shared implementation) and emits a `title` event.
+- Title: generated from the **first user message only**, fired as soon as that message is
+  accepted (not after the answer), via a direct one-shot model call with no tools and no session
+  — shared implementation in `08-agent-mode.md` §7 (decision Q8).
 
 ## 4. Cost discipline
 

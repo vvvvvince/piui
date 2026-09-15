@@ -148,16 +148,43 @@ What remains:
 - The `dangerous: boolean` badge on `ToolDescriptor`, purely so the Tools panel communicates
   what a profile can do.
 
-## 7. Titles
+## 7. Titles (decision Q8 — deliberately trivial)
 
-Shared with chat mode. After the first assistant message ends and no user-set title exists:
-- call the **same model** (or a configured cheap model, `PIUI_TITLE_MODEL=provider/id`) with a
-  one-shot, no-tools, no-session request: *"Summarize this exchange as a title of at most 6
-  words, no quotes, no trailing period."*
-- On any failure, fall back to the first 48 chars of the user's first message.
-- Persist to `conversations.title`, emit a `title` event. The user can rename at any time
-  (`PATCH /api/conversations/:id { title }`), which sets a `titleLocked` flag so auto-titling
-  never overwrites it.
+Shared with chat mode. **The title is derived from the first user message only.** The assistant's
+reply, tool calls, tool results and thinking blocks are never sent. This is the whole mechanic;
+resist making it cleverer.
+
+**Trigger.** Fire-and-forget as soon as the first user message is accepted — not after the
+assistant answers. It never blocks the prompt, and a slow or failed titler cannot delay a run.
+Skip entirely when `titleLocked` is set (a user-provided `title` at creation or a later rename).
+
+**Call.** A direct model call, **not** an `AgentSession`: use the shared `ModelRuntime`
+(`completeSimple`) so there is no session, no tools, no extensions, no persistence and no
+compaction involved.
+
+- model: the conversation's model, unless `PIUI_TITLE_MODEL=provider/id` is set (default unset)
+- input: the first user message's **text**, truncated to 1000 characters; images and attachments
+  are ignored
+- prompt: one user message, no system prompt beyond what the provider requires:
+  `Write a title of at most 6 words for a conversation that starts with this message. Reply with the title only — no quotes, no punctuation at the end.\n\n<message>`
+- `maxTokens: 32`, `thinkingLevel: "off"`, 10 s timeout, **no retry**
+
+**Post-processing.** Take the first line; strip surrounding quotes/backticks, a trailing period,
+and any leading `Title:`; collapse whitespace; cut to 48 characters on a word boundary. If the
+result is empty or longer than 6 words, keep the first 6 words.
+
+**Fallback.** On any failure — error, timeout, empty output, no text in the first message
+(image-only) — silently use the first 48 characters of the user's message. Never surface a
+titling error to the user; never retry.
+
+**Cost.** ~500 input + ~10 output tokens, i.e. fractions of a cent even on a frontier model —
+the reason no cheap-model split is specified. The usage is still accounted: add it to
+`conversations.cost_total` and `tokens_total` (it is piui's call, so pi's session stats do not
+include it) and label it "auxiliary" in the Usage panel so the numbers reconcile.
+
+**Persistence.** Write `conversations.title`, emit a `title` UI event and the global
+`conversation_title` event. A later `PATCH /api/conversations/:id { title }` sets `titleLocked`
+so auto-titling never overwrites a human title.
 
 ## 8. Acceptance criteria
 

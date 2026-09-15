@@ -6,8 +6,8 @@ summary: >-
   Technology choices, repository layout, environment configuration, and the contract with the pi SDK (SessionConfig, ResourceLoader, event flow, lifecycle, concurrency).
 covers: [stack, repo-layout, env-config, pi-integration, resource-loader, event-flow, concurrency]
 depends_on: [00-overview]
-required_by: [02-data-model, 09-api, 16-extensions]
-decisions: [Q1, Q2, Q3]
+required_by: [02-data-model, 09-api, 16-extensions, 19-deployment]
+decisions: [Q1, Q2, Q3, Q10]
 milestones: [M0, M2]
 spec_version: 1
 updated: 2026-02-20
@@ -100,6 +100,8 @@ piui/
 | `PIUI_HOME` | `~/.piui` | Root for db, profiles, skills, sessions, logs. |
 | `PIUI_PORT` | `8787` | HTTP port. |
 | `PIUI_HOST` | `127.0.0.1` | Bind address. Refuse to start on `0.0.0.0` unless `PIUI_ALLOW_REMOTE=1`. |
+| `PIUI_CONTAINER` | unset | Set by the shipped image. Downgrades the remote-bind warning to an info line (inside a container the network namespace is the boundary) and is reported by `/api/health`. See [19-deployment.md](19-deployment.md) §5. |
+| `PIUI_INSECURE_TRANSPORT_OK` | unset | Operator acknowledgement that plaintext HTTP is acceptable for this deployment; required for credential writes when requests do not arrive over HTTPS. Set by the shipped compose file, which publishes to loopback only. |
 | `PIUI_SESSION_SECRET` | random per boot | HMAC key for the auth cookie. If unset, log a warning (sessions die on restart). |
 | `PIUI_AGENT_DIR` | `$PIUI_HOME/agent` | Passed to pi as `agentDir`. Holds pi `settings.json`, `sessions/`. |
 | `PIUI_PI_AUTH_PATH` | `~/.pi/agent/auth.json` | Reuse the user's existing pi credentials by default; keys added in the UI are written here. Set to `$PIUI_HOME/auth.json` to isolate from the CLI. |

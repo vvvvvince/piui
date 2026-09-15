@@ -26,7 +26,7 @@ spec was changed. An implementing agent MUST treat these as binding.
 
 Every file in `spec/` carries YAML frontmatter (`id`, `status`, `summary`, `covers`,
 `depends_on`, `required_by`, `decisions`, `milestones`). Use it to find the normative document
-for a topic and to read dependencies first; the schema is documented in the README.
+for a topic and to read dependencies first; the schema is documented in `spec/README.md`.
 
 > **Implementers: you probably do not need this file.** The table below is the whole decision
 > set; the outcomes are already normative in the linked specs. Read a `## Qn` section only when

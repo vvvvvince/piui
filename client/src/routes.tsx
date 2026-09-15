@@ -1,11 +1,13 @@
 import type { RouteObject } from "react-router-dom";
-import { AppShell } from "./components/AppShell.js";
+import { AuthGate } from "./components/AuthGate.js";
+import { LoginPage } from "./pages/LoginPage.js";
 import { PlaceholderPage } from "./pages/PlaceholderPage.js";
 
 export const routes: RouteObject[] = [
+	{ path: "/login", element: <LoginPage /> },
 	{
 		path: "/",
-		element: <AppShell />,
+		element: <AuthGate />,
 		children: [
 			{ index: true, element: <PlaceholderPage title="Conversations" milestone="M2" /> },
 			{ path: "conversations", element: <PlaceholderPage title="Conversations" milestone="M2" /> },

@@ -1,4 +1,5 @@
 // HTTP DTOs. Source of truth: spec/09-api.md.
+import type { Principal } from "./domain.js";
 
 export interface ApiErrorBody {
 	error: {
@@ -35,6 +36,7 @@ export type ApiErrorCode =
 	| "too_many_runs"
 	| "rate_limited"
 	| "provider_not_configured"
+	| "step_up_required"
 	| "internal_error";
 
 export interface HealthResponse {
@@ -51,6 +53,27 @@ export interface MetaResponse {
 	workspaceRoots: string[];
 	limits: { maxUploadMb: number; maxConcurrentRuns: number; maxRunMinutes: number };
 	platform: string;
+}
+
+/** POST /api/auth/login (spec/09-api.md §2). */
+export interface LoginRequest {
+	username: string;
+	password: string;
+}
+
+export interface LoginResponse {
+	user: Principal;
+}
+
+/** GET /api/auth/me — `user.roles` drives admin-only UI. */
+export interface MeResponse {
+	user: Principal;
+	stepUpValidUntil: string | null;
+}
+
+/** POST /api/auth/step-up (spec/14-credentials.md §5). */
+export interface StepUpRequest {
+	password: string;
 }
 
 export interface Page<T> {

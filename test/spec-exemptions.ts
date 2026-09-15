@@ -3,7 +3,7 @@
 // reviewed at every milestone gate.
 
 /** Milestones whose acceptance lists are enforced by test/spec-coverage.test.ts. */
-export const COMPLETED_MILESTONES = ["M0"] as const;
+export const COMPLETED_MILESTONES = ["M0", "M1"] as const;
 
 /** Permanently exempt: manual, environmental, or process criteria. */
 export const exemptions: Record<string, string> = {
@@ -20,6 +20,16 @@ export const exemptions: Record<string, string> = {
  * pending tag belongs to a completed milestone, so this list cannot rot silently.
  */
 export const pending: Record<string, string> = {
+	// 14-credentials is an M1+M2 spec: only the step-up item (9.7) is due at M1.
+	"14-credentials#9.1": "M2",
+	"14-credentials#9.2": "M2",
+	"14-credentials#9.3": "M2",
+	"14-credentials#9.4": "M2",
+	"14-credentials#9.5": "M2",
+	"14-credentials#9.6": "M2",
+	"14-credentials#9.8": "M2",
+	"14-credentials#9.9": "M2",
+	"14-credentials#9.10": "M2",
 	"19-deployment#9.3": "M2",
 	"19-deployment#9.4": "M7",
 	"19-deployment#9.5": "M4",

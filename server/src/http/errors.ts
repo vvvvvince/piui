@@ -28,6 +28,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
 	too_many_runs: 429,
 	rate_limited: 429,
 	provider_not_configured: 400,
+	step_up_required: 403,
 	internal_error: 500,
 };
 

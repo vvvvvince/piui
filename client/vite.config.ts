@@ -10,7 +10,9 @@ export default defineConfig({
 	server: {
 		port: 5173,
 		proxy: {
-			"/api": { target: "http://127.0.0.1:8787", changeOrigin: true, ws: false },
+			// changeOrigin must stay false: the CSRF check compares Origin against Host
+			// (spec/06-auth.md §5), and rewriting Host to the target breaks that in dev.
+			"/api": { target: "http://127.0.0.1:8787", changeOrigin: false, ws: false },
 		},
 	},
 	build: { outDir: "dist", sourcemap: true },

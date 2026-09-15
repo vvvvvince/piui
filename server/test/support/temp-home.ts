@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseConfig } from "../../src/config.js";
 import { type AppContext, createContext, disposeContext } from "../../src/context.js";
+import type { AuthProvider } from "../../src/http/auth.js";
 import { FakeClock, SeqIdGen } from "../../src/util/clock.js";
 import { silentLogger } from "./logger.js";
 import { registerTempRoot } from "./temp-root-guard.js";
@@ -14,6 +15,8 @@ export interface TempHome {
 	ctx: AppContext;
 	clock: FakeClock;
 	ids: SeqIdGen;
+	/** Every artificial delay production code awaited, in ms — no test ever sleeps for real. */
+	sleeps: number[];
 	cleanup(): void;
 }
 
@@ -22,6 +25,8 @@ export interface TempHomeOptions {
 	fetch?: typeof fetch;
 	clock?: FakeClock;
 	ids?: SeqIdGen;
+	/** Swapping the auth provider must touch nothing but this wiring (spec/06-auth.md §8.6). */
+	authProvider?: AuthProvider;
 }
 
 export function createTempHome(options: TempHomeOptions = {}): TempHome {
@@ -29,6 +34,7 @@ export function createTempHome(options: TempHomeOptions = {}): TempHome {
 	registerTempRoot(home);
 	const clock = options.clock ?? new FakeClock();
 	const ids = options.ids ?? new SeqIdGen();
+	const sleeps: number[] = [];
 
 	const { config } = parseConfig({
 		PIUI_HOME: home,
@@ -44,6 +50,10 @@ export function createTempHome(options: TempHomeOptions = {}): TempHome {
 		clock,
 		ids,
 		logger: silentLogger(),
+		...(options.authProvider ? { authProvider: options.authProvider } : {}),
+		sleep: async (ms: number) => {
+			sleeps.push(ms);
+		},
 		fetch:
 			options.fetch ??
 			((() => {
@@ -57,6 +67,7 @@ export function createTempHome(options: TempHomeOptions = {}): TempHome {
 		ctx,
 		clock,
 		ids,
+		sleeps,
 		cleanup() {
 			disposeContext(ctx);
 			rmSync(home, { recursive: true, force: true });

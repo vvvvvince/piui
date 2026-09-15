@@ -6,9 +6,16 @@ import { type Logger, pino } from "pino";
 import type { Config } from "./config.js";
 import { type Db, openDb } from "./db/index.js";
 import { createRepositories, type Repositories } from "./db/repositories/index.js";
+import { type AuthProvider, StaticAuthProvider } from "./http/auth.js";
 import { type Clock, type IdGen, systemClock, systemIdGen } from "./util/clock.js";
 
 export type FetchLike = typeof fetch;
+export type SleepFn = (ms: number) => Promise<void>;
+
+const realSleep: SleepFn = (ms) =>
+	new Promise((resolve) => {
+		setTimeout(resolve, ms).unref?.();
+	});
 
 export interface AppContext {
 	config: Config;
@@ -18,6 +25,9 @@ export interface AppContext {
 	ids: IdGen;
 	logger: Logger;
 	fetch: FetchLike;
+	/** Injected so the artificial login delay never slows the suite down. */
+	sleep: SleepFn;
+	authProvider: AuthProvider;
 	version: string;
 	piVersion: string;
 	serveClient: boolean;
@@ -29,6 +39,9 @@ export interface CreateContextOptions {
 	ids?: IdGen;
 	logger?: Logger;
 	fetch?: FetchLike;
+	sleep?: SleepFn;
+	/** The only wiring line that knows which AuthProvider is in use (spec/06-auth.md §8.6). */
+	authProvider?: AuthProvider;
 	serveClient?: boolean;
 }
 
@@ -74,6 +87,8 @@ export function createContext(options: CreateContextOptions): AppContext {
 		ids,
 		logger,
 		fetch: options.fetch ?? globalThis.fetch,
+		sleep: options.sleep ?? realSleep,
+		authProvider: options.authProvider ?? new StaticAuthProvider(config.username, config.password),
 		version: readVersion(join(pkgDir, "package.json"), "0.0.0"),
 		piVersion: readVersion(
 			join(pkgDir, "node_modules", "@earendil-works", "pi-coding-agent", "package.json"),

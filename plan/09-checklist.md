@@ -48,12 +48,12 @@ Rule for every line below: **failing test first**, then code, then refactor, com
 - [x] **Gate:** M0 acceptance + mutation spot-check
 
 ## M1 — auth
-- [ ] `AuthProvider` + `StaticAuthProvider`, cookie sessions, guard
-- [ ] CSRF, login rate limit + delay, logout invalidation
-- [ ] step-up (`step_up_at`, `requireStepUp`, 10 min, fake clock)
-- [ ] `requireAdmin` on §5 surfaces; 404-invisible / 403-not-writable
-- [ ] `/login`, `AuthGate`, user menu, 401 interceptor, `StepUpDialog` + 403 retry
-- [ ] **Gate:** `06-auth#8`, `14-credentials#9.7`, `18-multi-user#9.1–9.8`
+- [x] `AuthProvider` + `StaticAuthProvider`, cookie sessions, guard
+- [x] CSRF, login rate limit + delay, logout invalidation
+- [x] step-up (`step_up_at`, `requireStepUp`, 10 min, fake clock)
+- [x] `requireAdmin` on §5 surfaces; 404-invisible / 403-not-writable
+- [x] `/login`, `AuthGate`, user menu, 401 interceptor, `StepUpDialog` + 403 retry
+- [x] **Gate:** `06-auth#8`, `14-credentials#9.7`, `18-multi-user#9.1–9.8`
 
 ## M2 — credentials, bridge, streaming, chat
 - [ ] `CredentialService` + `AuthFlow`; credential routes; secret-hygiene test; `0600`

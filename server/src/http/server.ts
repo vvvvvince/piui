@@ -6,6 +6,7 @@ import type { HealthResponse, MetaResponse } from "@piui/shared";
 import Fastify from "fastify";
 import type { AppContext } from "../context.js";
 import { ForbiddenError, NotFoundError } from "../db/repositories/base.js";
+import { LoginRateLimiter, registerAuth } from "./auth.js";
 import { ApiError } from "./errors.js";
 
 export type PiuiServer = Awaited<ReturnType<typeof buildServer>>;
@@ -22,6 +23,9 @@ export async function buildServer(ctx: AppContext) {
 	});
 
 	await app.register(fastifyCookie, { secret: config.sessionSecret });
+
+	const loginLimiter = new LoginRateLimiter(() => ctx.clock.nowMs());
+	await registerAuth(app, { ctx, provider: ctx.authProvider, limiter: loginLimiter });
 
 	// One log line per request (spec/01-architecture.md §1).
 	app.addHook("onResponse", (req, reply, done) => {

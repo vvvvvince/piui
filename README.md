@@ -80,6 +80,9 @@ These statements are required by the spec and are covered by acceptance criteria
 - **Do not expose piui to an untrusted network.** It binds to `127.0.0.1` by default and refuses
   to bind elsewhere unless `PIUI_ALLOW_REMOTE=1`. Put it behind a reverse proxy with TLS if you
   publish it. (`spec/11-security.md`)
+- **piui is not a security boundary between users.** Roles and ownership stop accidents and
+  config tampering, not a determined insider; every run shares one OS user, one set of provider
+  credentials, and one set of extensions. (`spec/18-multi-user.md` §6)
 - **A piui account is shell-equivalent trust.** Give piui accounts only to people you would give
   a shell account on the same machine: the agent's `bash`, `write` and `edit` tools, extensions,
   and installed API keys all run as the piui process owner, and all users share one process and

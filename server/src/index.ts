@@ -27,11 +27,22 @@ async function main(): Promise<void> {
 		`piui ${ctx.version} listening on http://${ctx.config.host}:${ctx.config.port}`,
 	);
 
+	// Expired sessions are deleted lazily on access plus by this sweep (spec/06-auth.md §2).
+	const sweep = setInterval(
+		() => {
+			const removed = ctx.repos.authSessions.sweepExpired();
+			if (removed > 0) ctx.logger.debug({ removed }, "expired sessions swept");
+		},
+		60 * 60 * 1000,
+	);
+	sweep.unref();
+
 	let shuttingDown = false;
 	const shutdown = async (signal: string): Promise<void> => {
 		if (shuttingDown) return;
 		shuttingDown = true;
 		ctx.logger.info({ signal }, "shutting down");
+		clearInterval(sweep);
 		try {
 			// M2+: abort streaming runs and dispose live sessions here.
 			await app.close();

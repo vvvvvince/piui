@@ -32,8 +32,10 @@ describe("GET /api/health", () => {
 
 describe("GET /api/meta", () => {
 	it("reports limits, search provider and workspace roots", async () => {
-		await withTestApp(async ({ app }) => {
-			const body = (await app.inject({ method: "GET", url: "/api/meta" })).json<MetaResponse>();
+		await withTestApp(async ({ app, mint }) => {
+			const body = (
+				await app.inject({ method: "GET", url: "/api/meta", headers: mint().headers })
+			).json<MetaResponse>();
 			expect(body.searchProvider).toEqual({ id: "none", configured: false });
 			expect(body.limits).toEqual({ maxUploadMb: 10, maxConcurrentRuns: 4, maxRunMinutes: 30 });
 			expect(body.workspaceRoots).toEqual([]);
@@ -43,8 +45,12 @@ describe("GET /api/meta", () => {
 
 describe("error envelope", () => {
 	it("[09-api#0.1] unknown API routes return the standard error shape", async () => {
-		await withTestApp(async ({ app }) => {
-			const res = await app.inject({ method: "GET", url: "/api/nope" });
+		await withTestApp(async ({ app, mint }) => {
+			const res = await app.inject({
+				method: "GET",
+				url: "/api/nope",
+				headers: mint().headers,
+			});
 			expect(res.statusCode).toBe(404);
 			expect(res.json()).toEqual({
 				error: { code: "not_found", message: expect.stringContaining("No route") },

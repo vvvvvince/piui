@@ -46,6 +46,12 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
 	credential_not_removable: 409,
 	credential_writes_disabled: 403,
 	insecure_transport: 403,
+	// spec/16-extensions.md §9.
+	extension_name_taken: 409,
+	extension_load_failed: 400,
+	extension_not_editable: 409,
+	extension_install_disabled: 403,
+	extension_too_large: 413,
 	internal_error: 500,
 };
 

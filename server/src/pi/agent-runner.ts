@@ -6,6 +6,7 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import type { SessionMode, ThinkingLevel } from "@piui/shared";
+import { bindExtensionUi, type PiuiExtensionUiPort } from "./extensions.js";
 import type { PiuiPromptTemplate } from "./prompts.js";
 import { createResourceLoader, createSettingsManager } from "./resources.js";
 import type { ModelRuntime } from "./runtime.js";
@@ -29,6 +30,10 @@ export interface ResolvedSessionConfig {
 	skills?: unknown[];
 	/** Composed prompt templates, highest precedence first (spec/15 §3.1). */
 	prompts?: PiuiPromptTemplate[];
+	/** spec/16-extensions.md §3 — resolved `additionalExtensionPaths`. */
+	extensionPaths?: string[];
+	/** The dialog bridge; omitted when the conversation has no extensions (spec §5). */
+	extensionUi?: PiuiExtensionUiPort;
 	steeringMode?: "all" | "one-at-a-time";
 	followUpMode?: "all" | "one-at-a-time";
 }
@@ -45,6 +50,8 @@ export interface CreateSessionInput {
 
 export interface AgentRunnerHandle {
 	session: AgentSession;
+	/** Tool names the extensions registered by the time `session_start` had run (spike S9 §5). */
+	extensionToolNames: string[];
 	dispose(): void;
 }
 
@@ -81,6 +88,7 @@ export async function createSession(input: CreateSessionInput): Promise<AgentRun
 		...(config.agentsFiles ? { agentsFiles: config.agentsFiles } : {}),
 		...(config.skills ? { skills: config.skills } : {}),
 		...(config.prompts ? { prompts: config.prompts } : {}),
+		...(config.extensionPaths ? { extensionPaths: config.extensionPaths } : {}),
 	});
 
 	const { session } = await createAgentSession({
@@ -97,8 +105,15 @@ export async function createSession(input: CreateSessionInput): Promise<AgentRun
 		settingsManager,
 	});
 
+	// spec/16-extensions.md §5 — dialogs, notices, status and widgets in "rpc" mode.
+	const extensionToolNames =
+		config.extensionUi && (config.extensionPaths?.length ?? 0) > 0
+			? await bindExtensionUi(session, config.extensionUi)
+			: [];
+
 	return {
 		session,
+		extensionToolNames,
 		dispose() {
 			session.dispose();
 		},

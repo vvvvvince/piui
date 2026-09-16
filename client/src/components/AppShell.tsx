@@ -10,6 +10,8 @@ const NAV = [
 	{ to: "/workspaces", label: "Workspaces" },
 	{ to: "/skills", label: "Skills" },
 	{ to: "/tools", label: "Tools" },
+	// spec/16-extensions.md §9 — the whole surface is admin-only.
+	{ to: "/extensions", label: "Extensions", adminOnly: true },
 	// admin-only surfaces live under Settings (spec/18-multi-user.md §5)
 	{ to: "/settings/providers", label: "Providers", adminOnly: true },
 	{ to: "/settings", label: "Settings", adminOnly: true },

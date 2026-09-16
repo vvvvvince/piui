@@ -842,3 +842,155 @@ and `repository scoping > keeps workspaces scoped the same way` failed by name (
   `@file` completion, both explicitly out of V1 scope in `15-commands-and-input.md` §§4.2, 5.
 - The `/settings` page is now a real page with one panel; M7 owns the rest of it
   (`steeringMode`/`followUpMode`, About, audit).
+
+---
+
+## M5c — Extensions ✅
+
+**Shipped**
+
+- *Spike S9* (`plan/spikes/11-extensions-and-ui-bridge.md`) before any code. Five facts drove the
+  design: a loader `reload()` **never throws** — a broken extension lands in
+  `LoadExtensionsResult.errors` with a per-path message, so enumeration needs no session and no
+  model; a **directory** path is not expanded by pi (`Extension path does not exist`), so piui
+  expands `*.ts` itself; `registerCommand(name, options)` takes the name as the first argument;
+  an unresolved `ctx.ui.confirm()` **blocks the run** until the host answers; and a tool
+  registered in `session_start` is admitted only if the construction allowlist already names it —
+  `setActiveToolsByName` cannot re-add it.
+- `server/src/pi/extensions.ts` — the pi boundary: `probeExtensions({ paths, cwd, agentDir })`
+  (loader-only, returns `{ loaded: [{ path, tools, commands }], errors }`) and `bindExtensionUi`,
+  the complete `ExtensionUIContext` for `mode: "rpc"` (dialogs + `notify`/`setStatus`/`setWidget`
+  live, TUI-only members degraded per pi's RPC table), returning the tool names observed after
+  `session_start`.
+- `server/src/extensions/resolve.ts` — the pure resolution of §3 (global enabled set − profile
+  opt-outs − load-failed, managed before external then alphabetical, built-in collisions dropped
+  with a warning naming both sides). Unit-tested on its own.
+- `server/src/extensions/service.ts` + `ExtensionRepository` — `sync()` registers
+  `$PIUI_HOME/extensions/*.ts` (managed) and `<userAgentDir>/extensions/*.ts` (external, spec
+  §2.2) and re-probes on every read; install by paste (name rules, 1 MB cap, probe-before-write),
+  `POST /fetch` (https + the M3 SSRF guard, returns source + sha256, installs nothing), register
+  an external path, `PATCH` (enable toggle / source edit with a re-probe), `DELETE` (managed →
+  `$PIUI_HOME/trash/extensions/`, external → forget only) and `rescan`.
+- Routes `GET/POST/PATCH/DELETE /api/extensions`, `/fetch`, `/rescan` — admin-only through the
+  existing prefix matcher, **step-up on every mutation** (`requiresStepUp` extended), an audit
+  line per mutation (`extension_install` carries origin + sha256) and
+  `PIUI_DISABLE_EXTENSION_INSTALL=1` → `403 extension_install_disabled` on all of them while
+  reads and per-profile switches keep working.
+- `ToolKind: "extension"` in the catalog (kind, `selectableInProfile: false`, collisions dropped)
+  and in `resolveTools`, which now takes `extensionToolNames`; `ResolvedProfile` gained
+  `extensionPaths` / `extensionToolNames` / `allowDynamicExtensionTools`, and
+  `createResourceLoader` finally passes a non-empty `additionalExtensionPaths`.
+- The UI bridge: `ConversationChannel` owns the pending-request registry (`ask` / `resolveUi` /
+  `cancelPendingUi`), `snapshot` carries `pendingUiRequests`, and
+  `POST /api/conversations/:id/ui-response` resolves from any tab, emitting `ui_request_resolved`
+  to close the other tabs' modals. `notify` → `notice`, `setStatus` → header badge,
+  `setWidget` → a block above the composer.
+- Extension commands in the `/` menu (`source: "extension"`, `availableWhileStreaming: true`) —
+  pi dispatches them inside `prompt()`, piui only sends the text.
+- Client: `/extensions` (list with source badge, health, tool/command chips, "disabled in N
+  profiles", global toggle, in-app uninstall dialog naming what disappears, paste install,
+  fetch-then-review with the mandatory checkbox, Rescan, broken-extension banner, kill-switch
+  notice), the profile editor's **Extensions** tab (per-profile switches + "Allow tools
+  registered by extensions at runtime"), and `ExtensionDialog` + status/widget rendering in the
+  conversation.
+
+**Verified by hand (Firefox via MCP, dev server on `/tmp/piui-m5c-home` + `/tmp/piui-m5c-roots`)**
+
+1. `/extensions` listed the two planted ambient files: `ambient` (external, ✓ healthy, tools
+   `ask_deploy`, command `/ambient-hello`) and `brokenone` with its `ParseError` and the
+   "1 enabled extension failed to load" banner. ✅ (§§10.2, 10.3)
+2. Paste install (`pasted`) landed in `$PIUI_HOME/extensions/pasted.ts` with its command listed;
+   URL install from a local https stub showed the full source read-only, kept **Install disabled**
+   until the review box was ticked, and then installed `remote` with `remote_tool`. ✅ (§§10.1, 10.9)
+3. Profile editor → **Extensions** tab → unticked `ambient` for the `NoExt` profile. The new
+   conversation on `WithExt` resolved `ls, read, remote_tool, ask_deploy` and offered
+   `/ambient-hello`; the one on `NoExt` resolved `ls, read, remote_tool` and had no such command.
+   Both carried the `brokenone` load warning. ✅ (§§10.4, 10.5, 10.7-adjacent)
+4. A run calling `ask_deploy` raised the modal ("Deploy? / Deploy to prod?") with the
+   `asking…` status badge; **reloading the page re-rendered it from the snapshot**, a second tab
+   showed the same dialog, answering in the second tab closed the first tab's modal, the tool
+   returned `confirmed=true`, and the widget (`target: prod / confirmed: true`) plus the
+   `deploy answered: true` notice appeared. ✅ (§10.6)
+5. `PIUI_DISABLE_EXTENSION_INSTALL=1`: the page showed the notice and disabled every control, and
+   POST/PATCH/DELETE/fetch/rescan all answered `403 extension_install_disabled`. ✅ (§10.9)
+6. Production build (`npm run build && NODE_ENV=production node server/dist/index.js`, port 8799):
+   `GET /api/extensions` (incl. the broken one), a paste install, an agent conversation resolving
+   `ask_deploy`, a `ui_request` over SSE and the `ui-response` round trip all answer on one port. ✅
+7. Suite: 357 tests green, offline, ~25 s; lint + strict typecheck clean.
+
+**Deviations / decisions**
+
+- *Open item 1 — the probe is loader-only, per read.* `ExtensionService.sync()` builds one
+  throwaway `DefaultResourceLoader`, reloads it and persists `tools_json`/`commands_json`/
+  `load_error`; it runs on every `GET /api/extensions` (like M5b's skill scan) rather than on boot
+  and rescan only, so a hand-edited file is never stale. A failing extension cannot take a
+  conversation down: `reload()` does not throw, the failure is a per-path error, and resolution
+  excludes it with a warning that surfaces in the conversation's banner.
+- *Open item 2 — the resolved set is computed per session build and live sessions are **not**
+  dropped.* This is the deliberate opposite of M5b's `hub.drop` answer: spec §7.3 says changes
+  apply to new conversations, and dropping a session would cancel its in-flight `ui_request`s.
+  `extensions_changed` on the global channel is the only invalidation; the UI says so in words.
+- *Open item 3 — pending dialogs live on the `ConversationChannel`, not the `LiveSession`*, because
+  the channel outlives a session swap. That is what makes "survives a reload", "answerable from a
+  second tab" and "`ui_request_resolved` closes the others" fall out for free. The timer is
+  pi's: `opts.timeout` becomes `timeoutMs` and auto-resolves as **cancelled** (→ `confirm` false,
+  `select`/`input`/`editor` undefined); with no timeout there is no piui timer — the wall-clock
+  runaway cap (`PIUI_MAX_RUN_MINUTES`) is the backstop, and `LiveSession.dispose()` resolves
+  everything still pending as cancelled.
+- *Open item 4 — the fetched source is written **after** the probe, never before.* The probe runs
+  on a copy in `$PIUI_HOME/scratch/ext-probe-<id>/`, so a syntax error leaves `extensions/`
+  untouched (acceptance 10.2, mutation-checked). The probe directory is per-call because pi (like
+  any ESM host) caches a module by path — re-probing a fixed file at the same path would return
+  the previous version. The review step shows the full source, byte count and sha256 with a
+  mandatory checkbox; the 1 MB cap is `extension_too_large` (the route raises its `bodyLimit` so
+  the domain, not the transport, reports it).
+- *Open item 5 — `disabledExtensionIds` keeps M5b's one-PATCH-per-toggle editor.* Same reasoning:
+  a batched save would be a new form-state machine for no user-visible gain.
+- *Extension tools are not per-profile selectable.* Spec §4 suggests selecting them like any other
+  tool, but acceptance 10.3 requires an ambient extension to be "active in a new conversation
+  without any UI action" and 10.4 makes the per-profile lever the **disable switch**. So extension
+  tools are added to the allowlist for every profile that does not disable the extension, and the
+  catalog marks them `selectableInProfile: false`. One concat instead of a selection join.
+- *`allowDynamicExtensionTools` is "observe, persist, allow next time".* pi fixes the allowlist at
+  construction (spike §5), so a tool first registered inside `session_start` is recorded into
+  `tools_json` after `bindExtensions` and admitted from the next session — the spec's "shows them
+  … once seen". Recorded only when exactly one extension is loaded, because with several the owner
+  of a new name is ambiguous.
+- *Nothing had to be deleted for §8.* `confirmDangerous` / `confirm_dangerous` / denylist code
+  never existed in this build (M5 already shipped guards-only); `runaway.test.ts`'s grep is now
+  tagged `[16-extensions#10.10]` and extended to those two field names so a future reintroduction
+  fails the suite.
+- *Chat mode gets the whole globally enabled set* (spec §2), including its extension tool names in
+  the `tools` allowlist — `noTools: "all"` would otherwise strip them (spike S8). Chat mode still
+  resolves **zero** filesystem built-ins, which the M5 test still proves.
+- *Browser-only finding:* `DELETE /api/extensions/:id` sent with `Content-Type: application/json`
+  and an empty body answers `400 internal_error` (fastify's `FST_ERR_CTP_EMPTY_JSON_BODY` is not
+  mapped into the envelope). The client never does that — a plain DELETE returns
+  `403 extension_install_disabled` as specified — but the generic mapping of fastify transport
+  errors is worth tidying in M7's hardening pass.
+
+**Mutation spot-check (§9.6)** — three mutants, all caught by name:
+
+1. dropped `disabled.has(extension.id)` from `resolveExtensions` (a per-profile opt-out stops
+   working) ⇒ `[16-extensions#10.4] drops only the profile's disabled ids…` and
+   `[16-extensions#10.4] disables an extension for one profile only` failed (2 failed, 355 passed).
+2. moved `writeFileSync` **before** the load probe in `install()` ⇒
+   `[16-extensions#10.2] rejects a syntax error with the load error and writes nothing` failed
+   (1 failed, 8 passed).
+3. removed `pendingUiRequests` from `LiveSession.snapshot()` ⇒
+   `[16-extensions#10.6] renders a dialog, resolves the extension promise, and survives a
+   reconnect` failed (1 failed, 4 passed). All reverted. ✅
+
+**Open for M6**
+
+- Extension **source editing** exists on the server (`PATCH { source }`, re-probed, refuses a
+  broken save) but the page has no editor yet — M6 brings CodeMirror in for skills and should
+  reuse it here, together with the spec's "save anyway, disabled" escape.
+- Upload-a-`.ts`-file and "register a path" are server-side only (`POST { path }`); the page
+  offers paste and URL. The multipart upload lands with M6's upload surface.
+- `extension_load_error` is logged as a conversation `notice` and an extension row field, but not
+  yet an audit line of its own (§7.4.5 lists five events; four are wired).
+- The probe re-reads and re-imports every enabled extension on each `GET /api/extensions`; fine
+  for a handful, but if an installation ever grows dozens, cache on mtime.
+- `piui-notices` (§6's single inline `InlineExtension`) is still not built: `onError` →
+  `notice` covers what it was for, and `extensionFactories` stays `[]`.

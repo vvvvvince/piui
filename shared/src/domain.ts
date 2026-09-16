@@ -52,6 +52,10 @@ export interface Profile extends Owned {
 	memory: { enabled: boolean; path: string | null; sizeBytes?: number };
 	/** spec/15-commands-and-input.md §3.2 — activate every discovered skill (TUI behavior). */
 	includeDiscoveredSkills: boolean;
+	/** spec/16-extensions.md §3 — the opt-out list: extensions switched off for this profile. */
+	disabledExtensionIds: string[];
+	/** spec/16-extensions.md §4 — admit extension tools registered after startup. */
+	allowDynamicExtensionTools: boolean;
 	defaults?: { provider?: string; modelId?: string; thinkingLevel?: ThinkingLevel };
 	createdAt: string;
 	updatedAt: string;

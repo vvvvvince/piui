@@ -6,6 +6,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import { AgentSidePanel } from "../components/AgentSidePanel.js";
 import { Composer } from "../components/Composer.js";
+import { ExtensionDialog } from "../components/ExtensionDialog.js";
 import { HotkeysDialog } from "../components/HotkeysDialog.js";
 import { MessageList } from "../components/MessageList.js";
 import { WebSearchToggle } from "../components/WebSearchToggle.js";
@@ -142,6 +143,16 @@ export function ConversationPage(): JSX.Element {
 							ctx {stream.state.contextPercent}%
 						</span>
 					)}
+					{/* spec/16-extensions.md §5 — `setStatus`, keyed, in the header. */}
+					{stream.statuses.map((status) => (
+						<span
+							key={status.key}
+							data-testid={`extension-status-${status.key}`}
+							className="rounded-full border border-slate-700 px-2 py-0.5 text-slate-300"
+						>
+							{status.text}
+						</span>
+					))}
 					<span>${(stream.usage?.costTotal ?? detail.data?.costTotal ?? 0).toFixed(4)}</span>
 					<button type="button" className="underline" onClick={() => setHotkeysOpen(true)}>
 						Hotkeys
@@ -195,6 +206,17 @@ export function ConversationPage(): JSX.Element {
 				</ul>
 			)}
 
+			{/* spec/16-extensions.md §5 — `setWidget`, keyed, around the composer. */}
+			{stream.widgets.map((widget) => (
+				<pre
+					key={widget.key}
+					data-testid={`extension-widget-${widget.key}`}
+					className="mx-4 mb-1 whitespace-pre-wrap rounded border border-slate-800 bg-slate-900/60 px-3 py-1 text-xs text-slate-300"
+				>
+					{widget.lines.join("\n")}
+				</pre>
+			))}
+
 			<Composer
 				conversationId={id}
 				streaming={streaming}
@@ -225,6 +247,15 @@ export function ConversationPage(): JSX.Element {
 					</span>
 				)}
 			</Composer>
+			{stream.uiRequests[0] && (
+				<ExtensionDialog
+					request={stream.uiRequests[0]}
+					onAnswer={(answer) => {
+						const requestId = stream.uiRequests[0]!.requestId;
+						void api.answerUiRequest(id, { requestId, ...answer });
+					}}
+				/>
+			)}
 			{hotkeysOpen && <HotkeysDialog onClose={() => setHotkeysOpen(false)} />}
 		</div>
 	);

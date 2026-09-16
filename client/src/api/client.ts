@@ -11,10 +11,17 @@ import type {
 	ConversationSummary,
 	CreateConversationRequest,
 	CreateConversationResponse,
+	CreateExtensionRequest,
 	CreateProfileRequest,
 	CreateWorkspaceRequest,
+	DeleteExtensionResponse,
 	DeleteProfileResponse,
 	DeleteWorkspaceResponse,
+	ExtensionDetail,
+	ExtensionRescanResponse,
+	ExtensionSummary,
+	ExtensionsResponse,
+	FetchExtensionResponse,
 	FsBrowseResponse,
 	HealthResponse,
 	LoginResponse,
@@ -23,6 +30,7 @@ import type {
 	MetaResponse,
 	ModelsResponse,
 	PatchConversationRequest,
+	PatchExtensionRequest,
 	PatchProfileRequest,
 	PatchWorkspaceRequest,
 	PostMessageResponse,
@@ -39,6 +47,7 @@ import type {
 	SkillsResponse,
 	ToolCatalogItem,
 	ToolsResponse,
+	UiResponseRequest,
 	ValidatePathResponse,
 	VerifyProviderResponse,
 	Workspace,
@@ -229,6 +238,23 @@ export const api = {
 		request<AbortResponse>(`/conversations/${id}/abort`, { method: "POST" }),
 	clearQueue: (id: string) =>
 		request<QueueResponse>(`/conversations/${id}/queue/clear`, { method: "POST" }),
+	/** spec/16-extensions.md §5 — answering an extension dialog. */
+	answerUiRequest: (id: string, body: UiResponseRequest) =>
+		request<{ resolved: boolean }>(`/conversations/${id}/ui-response`, { method: "POST", body }),
+
+	// ------------------------------------------------------------ extensions
+	extensions: () => request<ExtensionsResponse>("/extensions"),
+	extension: (id: string) => request<ExtensionDetail>(`/extensions/${id}`),
+	installExtension: (body: CreateExtensionRequest) =>
+		request<ExtensionSummary>("/extensions", { method: "POST", body }),
+	fetchExtension: (url: string) =>
+		request<FetchExtensionResponse>("/extensions/fetch", { method: "POST", body: { url } }),
+	patchExtension: (id: string, body: PatchExtensionRequest) =>
+		request<ExtensionSummary>(`/extensions/${id}`, { method: "PATCH", body }),
+	deleteExtension: (id: string) =>
+		request<DeleteExtensionResponse>(`/extensions/${id}`, { method: "DELETE" }),
+	rescanExtensions: () =>
+		request<ExtensionRescanResponse>("/extensions/rescan", { method: "POST" }),
 	conversationStats: (id: string) =>
 		request<ConversationStatsResponse>(`/conversations/${id}/stats`),
 };

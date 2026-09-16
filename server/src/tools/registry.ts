@@ -90,8 +90,21 @@ export interface SearchProviderStatus {
 	readonly configured: boolean;
 }
 
+/** The slice of the extension service the catalog needs (spec/16-extensions.md §4). */
+export interface ExtensionToolSource {
+	records(): {
+		id: string;
+		name: string;
+		enabled: boolean;
+		loadError: string | null;
+		tools: string[];
+	}[];
+}
+
 export interface ToolRegistryDeps {
 	repos: Pick<Repositories, "tools">;
+	/** Absent in unit tests that only care about built-ins. */
+	extensions?: ExtensionToolSource;
 	search: SearchProviderStatus;
 	logger: RegistryLogger;
 	/** Overridable for tests; production passes `process.platform`. */
@@ -109,6 +122,12 @@ export interface ResolveToolsInput {
 	mode: "chat" | "agent";
 	webSearch: boolean;
 	profile?: { toolNames: readonly string[]; memoryEnabled: boolean };
+	/**
+	 * spec/16-extensions.md §4 — tools registered by the extensions this conversation loads.
+	 * They are *not* per-profile selectable: the lever is the extension's disable switch (§3),
+	 * which is what makes acceptance 10.3 ("active without any UI action") true.
+	 */
+	extensionToolNames?: readonly string[];
 }
 
 export interface ResolvedToolSet extends ResolvedTools {
@@ -116,6 +135,8 @@ export interface ResolvedToolSet extends ResolvedTools {
 	builtinToolNames: string[];
 	/** piui `defineTool` definitions the session must also receive (spike plan/spikes/08). */
 	customToolNames: string[];
+	/** Names an extension registers; pi owns their implementation (spec/16 §4). */
+	extensionToolNames: string[];
 }
 
 export class ToolRegistry {
@@ -167,7 +188,28 @@ export class ToolRegistry {
 			const available = spec.needsSearchProvider ? this.deps.search.configured : true;
 			push(spec, "builtin_piui", available);
 		}
-		// `http` and `extension` tools join the catalog in M6 / M5c.
+		// spec/16-extensions.md §4 — extension-registered tools, cached by the probe. A name that
+		// collides with a built-in is dropped here, so it can never shadow `bash`/`read`/….
+		const builtinNames = new Set(items.map((item) => item.name));
+		for (const extension of this.deps.extensions?.records() ?? []) {
+			if (!extension.enabled || extension.loadError) continue;
+			for (const name of extension.tools) {
+				if (builtinNames.has(name)) continue;
+				builtinNames.add(name);
+				items.push({
+					name,
+					label: name,
+					description: `Registered by the "${extension.name}" extension.`,
+					kind: "extension",
+					enabled: !disabled.has(name),
+					// Per-profile control is the extension's disable switch, not a tool checkbox (§3).
+					selectableInProfile: false,
+					dangerous: false,
+					configurable: false,
+					usedByProfiles: usage.get(name) ?? 0,
+				});
+			}
+		}
 		return items;
 	}
 
@@ -208,11 +250,19 @@ export class ToolRegistry {
 			return {
 				builtinToolNames: [],
 				customToolNames: chat.toolNames,
+				extensionToolNames: [],
 				toolNames: chat.toolNames,
 				warnings: chat.warnings,
 			};
 		}
-		return this.resolveAgent(input.profile ?? { toolNames: [], memoryEnabled: false });
+		const resolved = this.resolveAgent(input.profile ?? { toolNames: [], memoryEnabled: false });
+		for (const name of input.extensionToolNames ?? []) {
+			if (resolved.toolNames.includes(name)) continue;
+			if (!this.isEnabled(name)) continue;
+			resolved.toolNames.push(name);
+			resolved.extensionToolNames.push(name);
+		}
+		return resolved;
 	}
 
 	/** Agent mode: the profile's selection minus unknown/disabled names, plus memory_append. */
@@ -248,6 +298,7 @@ export class ToolRegistry {
 		return {
 			builtinToolNames,
 			customToolNames,
+			extensionToolNames: [],
 			toolNames: [...builtinToolNames, ...customToolNames],
 			warnings,
 		};

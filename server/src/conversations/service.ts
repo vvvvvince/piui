@@ -15,6 +15,7 @@ import type { AppContext } from "../context.js";
 import type { ConversationRow } from "../db/repositories/conversations.js";
 import { ApiError } from "../http/errors.js";
 import { createSession, openSessionManager } from "../pi/agent-runner.js";
+import type { PiuiExtensionUiPort } from "../pi/extensions.js";
 import { buildChatSystemPrompt, resolveChatTools } from "../pi/resources.js";
 import { fallbackTitle, generateTitle } from "../pi/title.js";
 import { createMemoryTool } from "../pi/tools/memory.js";
@@ -364,7 +365,14 @@ export class ConversationService {
 			sessionsDir: this.ctx.config.sessionsDir,
 			path: row.session_path,
 		});
-		const toolNames = agent ? agent.toolNames : this.resolvedToolNames(row);
+		// spec/16-extensions.md §2: chat mode has no profile, so it gets the whole globally
+		// enabled set; agent mode gets it minus the profile's opt-outs (already resolved).
+		const extensions = agent
+			? { paths: agent.extensionPaths, toolNames: agent.extensionToolNames }
+			: this.services.extensions.resolveFor({});
+		const toolNames = agent
+			? agent.toolNames
+			: [...this.resolvedToolNames(row), ...extensions.toolNames];
 		// `noTools: "all"` would strip custom tools too, so the names *and* the definitions have
 		// to travel together (spike plan/spikes/08).
 		const wantsWeb = toolNames.includes("web_search") || toolNames.includes("web_fetch");
@@ -378,6 +386,10 @@ export class ConversationService {
 		const handle = await createSession({
 			config: {
 				conversationId,
+				extensionPaths: extensions.paths,
+				...(extensions.paths.length > 0
+					? { extensionUi: this.extensionUiPort(conversationId) }
+					: {}),
 				mode: agent ? "agent" : "chat",
 				model,
 				thinkingLevel: row.thinking_level as ThinkingLevel,
@@ -404,6 +416,11 @@ export class ConversationService {
 			).subscribe((event) => {
 				if (event.type === "agent_start") web.beginRun();
 			});
+		}
+		// spec/16-extensions.md §4 — a tool registered during `session_start` is only observable
+		// now; remember it so the next session for this profile admits it (spike S9 §5).
+		if (agent?.allowDynamicExtensionTools) {
+			this.services.extensions.rememberObservedTools(extensions.paths, handle.extensionToolNames);
 		}
 		const sessionFile = handle.session.sessionFile;
 		if (sessionFile && sessionFile !== row.session_path) {
@@ -453,6 +470,29 @@ export class ConversationService {
 			);
 		}
 		return this.services.profiles.resolve(row.profile_id);
+	}
+
+	/** spec/16-extensions.md §5 — the RPC UI bridge, routed into the conversation channel. */
+	private extensionUiPort(conversationId: string): PiuiExtensionUiPort {
+		const channel = this.hub.channel(conversationId);
+		return {
+			ask: (request) => channel.ask({ requestId: this.ctx.ids.newId(), ...request }),
+			notify: (text: string, level: "info" | "warning" | "error") =>
+				channel.emit({ type: "notice", level, text }),
+			setStatus: (key: string, text: string | null) => channel.emit({ type: "status", key, text }),
+			setWidget: (key: string, lines: string[] | null, placement: "aboveEditor" | "belowEditor") =>
+				channel.emit({ type: "widget", key, lines, placement }),
+			// `setEditorText`/`pasteToEditor` have no server-side meaning; surfaced as a notice so the
+			// text is not simply swallowed.
+			setEditorText: (text: string) =>
+				channel.emit({ type: "notice", level: "info", text: `Extension suggested: ${text}` }),
+			onError: (error: { extensionPath: string; error: string }) =>
+				channel.emit({
+					type: "notice",
+					level: "error",
+					text: `${error.extensionPath}: ${error.error}`,
+				}),
+		};
 	}
 
 	/** Every append emits a visible notice in the transcript (spec/03-profiles.md §5.3). */

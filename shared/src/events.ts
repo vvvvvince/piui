@@ -44,8 +44,27 @@ export interface ConversationRuntimeState {
 	contextPercent: number | null;
 }
 
+/** An extension dialog waiting for an answer (spec/16-extensions.md §5). */
+export interface UiRequest {
+	requestId: string;
+	method: "select" | "confirm" | "input" | "editor";
+	title?: string;
+	message?: string;
+	options?: string[];
+	placeholder?: string;
+	prefill?: string;
+	timeoutMs?: number;
+}
+
 export type UiEvent =
-	| { type: "snapshot"; seq: number; messages: UiMessage[]; state: ConversationRuntimeState }
+	| {
+			type: "snapshot";
+			seq: number;
+			messages: UiMessage[];
+			state: ConversationRuntimeState;
+			/** Dialogs still waiting: a reload re-renders them (spec/16-extensions.md §5). */
+			pendingUiRequests?: UiRequest[];
+	  }
 	| { type: "state"; seq: number; state: ConversationRuntimeState }
 	| { type: "message_start"; seq: number; message: UiMessage }
 	| { type: "block_start"; seq: number; messageId: string; block: UiBlock }
@@ -61,18 +80,7 @@ export type UiEvent =
 	| { type: "message_end"; seq: number; message: UiMessage }
 	| { type: "tool_update"; seq: number; messageId: string; blockId: string; block: UiBlock }
 	| { type: "queue"; seq: number; steering: string[]; followUp: string[] }
-	| {
-			type: "ui_request";
-			seq: number;
-			requestId: string;
-			method: "select" | "confirm" | "input" | "editor";
-			title?: string;
-			message?: string;
-			options?: string[];
-			placeholder?: string;
-			prefill?: string;
-			timeoutMs?: number;
-	  }
+	| ({ type: "ui_request"; seq: number } & UiRequest)
 	| { type: "ui_request_resolved"; seq: number; requestId: string }
 	| { type: "status"; seq: number; key: string; text: string | null }
 	| {

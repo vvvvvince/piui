@@ -41,6 +41,12 @@ export interface ResolvedProfile {
 	customToolNames: string[];
 	/** The union handed to pi as the allowlist (spike plan/spikes/08). */
 	toolNames: string[];
+	/** spec/16-extensions.md §3 — `additionalExtensionPaths` for this conversation. */
+	extensionPaths: string[];
+	/** Tool names those extensions register (already in `toolNames`). */
+	extensionToolNames: string[];
+	/** spec/16-extensions.md §4 — admit tools an extension registers after startup. */
+	allowDynamicExtensionTools: boolean;
 	memory: { enabled: boolean; path: string; injectedBytes: number; sizeBytes: number };
 	/** How many skills "Include all discovered skills" added (spec/15 §3.2, 0 when off). */
 	discoveredSkillCount: number;
@@ -51,6 +57,13 @@ export interface ProfileServiceDeps {
 	tools: ToolRegistry;
 	skills: SkillCatalog;
 	memory: MemoryStore;
+	extensions: {
+		resolveFor(options: { profileId?: string | null }): {
+			paths: string[];
+			toolNames: string[];
+			warnings: string[];
+		};
+	};
 }
 
 export class ProfileService {
@@ -97,6 +110,9 @@ export class ProfileService {
 			...(body.includeDiscoveredSkills === undefined
 				? {}
 				: { includeDiscoveredSkills: body.includeDiscoveredSkills }),
+			...(body.allowDynamicExtensionTools === undefined
+				? {}
+				: { allowDynamicExtensionTools: body.allowDynamicExtensionTools }),
 			...(body.defaults?.provider && body.defaults.modelId
 				? { defaultModel: `${body.defaults.provider}/${body.defaults.modelId}` }
 				: {}),
@@ -105,6 +121,7 @@ export class ProfileService {
 		this.writeAgentsMd(row.id, body.agentsMd ?? "");
 		this.ctx.repos.profiles.setTools(principal, row.id, body.toolNames ?? []);
 		this.ctx.repos.skills.setProfileSkills(row.id, body.skillIds ?? []);
+		this.ctx.repos.extensions.setProfileDisabled(row.id, body.disabledExtensionIds ?? []);
 		return this.detail(principal, this.ctx.repos.profiles.get(principal, row.id)!);
 	}
 
@@ -120,6 +137,9 @@ export class ProfileService {
 			...(body.includeDiscoveredSkills === undefined
 				? {}
 				: { includeDiscoveredSkills: body.includeDiscoveredSkills }),
+			...(body.allowDynamicExtensionTools === undefined
+				? {}
+				: { allowDynamicExtensionTools: body.allowDynamicExtensionTools }),
 			...(body.defaults === undefined
 				? {}
 				: {
@@ -134,6 +154,9 @@ export class ProfileService {
 		if (body.toolNames !== undefined)
 			this.ctx.repos.profiles.setTools(principal, id, body.toolNames);
 		if (body.skillIds !== undefined) this.ctx.repos.skills.setProfileSkills(id, body.skillIds);
+		if (body.disabledExtensionIds !== undefined) {
+			this.ctx.repos.extensions.setProfileDisabled(id, body.disabledExtensionIds);
+		}
 		return this.detail(principal, this.ctx.repos.profiles.get(principal, id)!);
 	}
 
@@ -269,10 +292,14 @@ export class ProfileService {
 		warnings.push(...skills.warnings);
 
 		const memoryEnabled = row.memory_enabled === 1;
+		// spec/16-extensions.md §3 — global enabled set minus this profile's opt-outs.
+		const extensions = this.deps.extensions.resolveFor({ profileId: row.id });
+		warnings.push(...extensions.warnings);
 		const tools = this.deps.tools.resolveTools({
 			mode: "agent",
 			webSearch: false,
 			profile: { toolNames: this.ctx.repos.profiles.toolNamesById(row.id), memoryEnabled },
+			extensionToolNames: extensions.toolNames,
 		});
 		warnings.push(...tools.warnings);
 
@@ -307,6 +334,9 @@ export class ProfileService {
 			builtinToolNames: tools.builtinToolNames,
 			customToolNames: tools.customToolNames,
 			toolNames: tools.toolNames,
+			extensionPaths: extensions.paths,
+			extensionToolNames: tools.extensionToolNames,
+			allowDynamicExtensionTools: row.allow_dynamic_extension_tools === 1,
 			memory: { enabled: memoryEnabled, path: memoryPath, injectedBytes, sizeBytes },
 			discoveredSkillCount: discovered.length,
 			warnings,
@@ -376,6 +406,8 @@ export class ProfileService {
 				sizeBytes: this.memory.stat(this.memoryPath(row)).sizeBytes,
 			},
 			includeDiscoveredSkills: row.include_discovered_skills === 1,
+			disabledExtensionIds: this.ctx.repos.extensions.disabledIdsOfProfile(row.id),
+			allowDynamicExtensionTools: row.allow_dynamic_extension_tools === 1,
 			...(row.default_model || row.default_thinking
 				? {
 						defaults: {

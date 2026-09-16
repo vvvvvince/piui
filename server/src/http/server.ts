@@ -11,6 +11,7 @@ import { LoginRateLimiter, registerAuth } from "./auth.js";
 import { ApiError } from "./errors.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerGlobalEventRoutes } from "./routes/events.js";
+import { registerExtensionRoutes } from "./routes/extensions.js";
 import { registerModelRoutes } from "./routes/models.js";
 import { registerProfileRoutes } from "./routes/profiles.js";
 import { registerPromptRoutes } from "./routes/prompts.js";
@@ -154,6 +155,7 @@ export async function buildServer(ctx: AppContext, injected?: Services) {
 	await registerProfileRoutes(app, services.profiles, services.skills);
 	await registerConversationRoutes(app, services.conversations, services.hub, services.commands);
 	await registerPromptRoutes(app, services.commands);
+	await registerExtensionRoutes(app, services.extensions);
 
 	if (ctx.serveClient && existsSync(join(config.clientDist, "index.html"))) {
 		await app.register(fastifyStatic, { root: config.clientDist, prefix: "/" });

@@ -11,6 +11,7 @@ import type {
 	PostMessageRequest,
 	PostMessageResponse,
 	QueueResponse,
+	UiResponseRequest,
 } from "@piui/shared";
 import type { CommandService } from "../../commands/service.js";
 import type { ConversationService } from "../../conversations/service.js";
@@ -142,6 +143,32 @@ export async function registerConversationRoutes(
 		async (req): Promise<AbortResponse> => ({
 			restored: await service.abort(req.principal!, req.params.id),
 		}),
+	);
+
+	// spec/16-extensions.md §5 — answering an extension dialog. Any tab may answer; answering a
+	// request that is already gone is a 200, not an error (the other tab was faster).
+	app.post<{ Params: { id: string }; Body: UiResponseRequest }>(
+		"/api/conversations/:id/ui-response",
+		{
+			schema: {
+				body: {
+					type: "object",
+					required: ["requestId"],
+					additionalProperties: false,
+					properties: {
+						requestId: { type: "string", minLength: 1 },
+						value: { type: "string" },
+						confirmed: { type: "boolean" },
+						cancelled: { type: "boolean" },
+					},
+				},
+			},
+		},
+		async (req): Promise<{ resolved: boolean }> => {
+			service.rowFor(req.principal!, req.params.id);
+			const { requestId, ...answer } = req.body;
+			return { resolved: hub.channel(req.params.id).resolveUi(requestId, answer) };
+		},
 	);
 
 	app.post<{ Params: { id: string } }>(

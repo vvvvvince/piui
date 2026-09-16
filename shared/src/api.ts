@@ -53,6 +53,12 @@ export type ApiErrorCode =
 	| "rate_limited"
 	| "provider_not_configured"
 	| "step_up_required"
+	// spec/16-extensions.md §9
+	| "extension_name_taken"
+	| "extension_load_failed"
+	| "extension_not_editable"
+	| "extension_install_disabled"
+	| "extension_too_large"
 	// spec/14-credentials.md §3
 	| "provider_not_found"
 	| "provider_ambient_only"
@@ -349,6 +355,9 @@ export interface CreateProfileRequest {
 	skillIds?: string[];
 	toolNames?: string[];
 	includeDiscoveredSkills?: boolean;
+	/** spec/16-extensions.md §3 — extensions switched off for this profile. */
+	disabledExtensionIds?: string[];
+	allowDynamicExtensionTools?: boolean;
 	memory?: { enabled: boolean; path?: string | null };
 	defaults?: { provider?: string; modelId?: string; thinkingLevel?: ThinkingLevel };
 }
@@ -426,6 +435,81 @@ export interface ProjectResourcesResponse {
 
 export interface SkillsResponse {
 	items: SkillSummary[];
+}
+
+// ------------------------------------------------------------- extensions
+// spec/16-extensions.md §9.
+
+export interface ExtensionSummary {
+	id: string;
+	name: string;
+	source: "managed" | "external";
+	origin: string | null;
+	path: string;
+	enabled: boolean;
+	loadError: string | null;
+	tools: string[];
+	commands: string[];
+	disabledInProfiles: number;
+	editable: boolean;
+}
+
+export interface ExtensionsResponse {
+	items: ExtensionSummary[];
+	/** false when PIUI_DISABLE_EXTENSION_INSTALL=1 (spec §7.4). */
+	installEnabled: boolean;
+}
+
+export interface ExtensionDetail extends ExtensionSummary {
+	/** Managed extensions only; null for external ones (never edited by piui). */
+	source_text: string | null;
+}
+
+/** Paste (`name` + `source`) or register an external path (`path`). */
+export interface CreateExtensionRequest {
+	name?: string;
+	source?: string;
+	path?: string;
+	/** Provenance for the audit line: the URL or upload filename a paste came from. */
+	origin?: string;
+}
+
+export interface FetchExtensionRequest {
+	url: string;
+}
+
+/** The review step: the full source, never installed (spec §7.1). */
+export interface FetchExtensionResponse {
+	name: string;
+	source: string;
+	sha256: string;
+	bytes: number;
+}
+
+export interface PatchExtensionRequest {
+	enabled?: boolean;
+	source?: string;
+}
+
+export interface DeleteExtensionResponse {
+	affectedProfiles: string[];
+	removedTools: string[];
+	removedCommands: string[];
+}
+
+export interface ExtensionRescanResponse {
+	added: number;
+	updated: number;
+	removed: number;
+	errors: { path: string; error: string }[];
+}
+
+/** POST /api/conversations/:id/ui-response (spec §5). */
+export interface UiResponseRequest {
+	requestId: string;
+	value?: string;
+	confirmed?: boolean;
+	cancelled?: boolean;
 }
 
 // ----------------------------------------------------------- conversations

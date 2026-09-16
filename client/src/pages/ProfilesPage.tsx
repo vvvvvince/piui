@@ -9,7 +9,7 @@ const AGENTS_MD_WARN_BYTES = 16 * 1024;
 const kb = (bytes: number): string =>
 	bytes < 1024 ? `${bytes} B` : `${Math.round(bytes / 1024)} KB`;
 
-type Tab = "instructions" | "tools" | "skills" | "memory";
+type Tab = "instructions" | "tools" | "skills" | "extensions" | "memory";
 
 export function ProfilesPage(): JSX.Element {
 	const queryClient = useQueryClient();
@@ -162,6 +162,8 @@ function ProfileEditor({
 	});
 	const tools = useQuery({ queryKey: ["tools"], queryFn: api.tools });
 	const skills = useQuery({ queryKey: ["skills"], queryFn: api.skills });
+	// spec/16-extensions.md §7.3 — installed globally, switched off per profile.
+	const extensions = useQuery({ queryKey: ["extensions"], queryFn: api.extensions });
 	// spec/15-commands-and-input.md §3.2 — the visible price of TUI parity. pi loads every
 	// discovered skill's name + description into every request; ~4 chars per token.
 	const discoveredSkills = (skills.data?.items ?? []).filter((s) => s.source === "external");
@@ -246,7 +248,7 @@ function ProfileEditor({
 			)}
 
 			<div role="tablist" className="mt-3 flex gap-2 border-b border-slate-800 text-sm">
-				{(["instructions", "tools", "skills", "memory"] as Tab[]).map((name) => (
+				{(["instructions", "tools", "skills", "extensions", "memory"] as Tab[]).map((name) => (
 					<button
 						key={name}
 						role="tab"
@@ -382,6 +384,61 @@ function ProfileEditor({
 								Skills require the `read` tool so the agent can load them.
 							</li>
 						)}
+				</ul>
+			)}
+
+			{tab === "extensions" && (
+				<ul className="mt-3 space-y-1" data-testid="profile-extensions">
+					<li className="text-xs text-slate-400">
+						Extensions are installed globally. Here you can switch some off for this profile.
+					</li>
+					{(extensions.data?.items ?? []).map((extension) => (
+						<li key={extension.id} className="flex items-center gap-2 text-sm">
+							<input
+								id={`profile-extension-${extension.name}`}
+								data-testid={`profile-extension-${extension.name}`}
+								type="checkbox"
+								checked={!detail.disabledExtensionIds.includes(extension.id)}
+								onChange={(event) =>
+									save.mutate({
+										disabledExtensionIds: event.target.checked
+											? detail.disabledExtensionIds.filter((id) => id !== extension.id)
+											: [...detail.disabledExtensionIds, extension.id],
+									})
+								}
+							/>
+							<label htmlFor={`profile-extension-${extension.name}`}>
+								<span className="font-mono text-xs">{extension.name}</span>{" "}
+								<span className="rounded bg-slate-800 px-1 text-[10px] text-slate-400">
+									{extension.source}
+								</span>{" "}
+								<span className="text-slate-400">{extension.tools.join(", ") || "no tools"}</span>
+								{!extension.enabled && <span className="text-amber-400"> (disabled globally)</span>}
+								{extension.loadError && <span className="text-rose-400"> (failed to load)</span>}
+							</label>
+						</li>
+					))}
+					{(extensions.data?.items.length ?? 0) === 0 && (
+						<li className="text-sm text-slate-400">No extensions installed.</li>
+					)}
+					<li className="mt-2 flex items-start gap-2 border-t border-slate-800 pt-2 text-sm">
+						<input
+							id="allow-dynamic-extension-tools"
+							data-testid="allow-dynamic-extension-tools"
+							type="checkbox"
+							checked={detail.allowDynamicExtensionTools !== false}
+							onChange={(event) =>
+								save.mutate({ allowDynamicExtensionTools: event.target.checked })
+							}
+						/>
+						<label htmlFor="allow-dynamic-extension-tools">
+							Allow tools registered by extensions at runtime
+							<span className="block text-xs text-slate-400">
+								A tool an extension registers after startup is remembered the first time it is seen
+								and allowed from the next conversation on.
+							</span>
+						</label>
+					</li>
 				</ul>
 			)}
 

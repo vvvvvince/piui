@@ -27,7 +27,7 @@ Rule for every line below: **failing test first**, then code, then refactor, com
 - [x] S6 credentials / `AuthFlow` surface (`plan/spikes/06-credentials-and-auth-flow.md`)
 - [x] S7 steer / followUp / abort / preflight (typings verified; behavior re-checked in M2)
 - [x] S8 skill commands + prompt templates (`plan/spikes/10`)
-- [ ] S9 `bindExtensions` + `additionalExtensionPaths` (M5c)
+- [x] S9 `bindExtensions` + `additionalExtensionPaths` (`plan/spikes/11`)
 - [x] S10 `defineTool` + injectable fetch · S11 built-in tool names · S12 usage/cost accessors
 - [x] S9 built-in tools for real: names, params, `tool_execution_*` payloads (`plan/spikes/09`)
 
@@ -107,14 +107,14 @@ Rule for every line below: **failing test first**, then code, then refactor, com
 - [x] **Gate:** `15-commands-and-input#6.1–6.10`
 
 ## M5c — extensions
-- [ ] probe enumeration, registry refresh, `extensions_changed`
-- [ ] auto-register `~/.pi/agent/extensions/*.ts`
-- [ ] install paths (paste/upload/URL/register) + probe gate + step-up + audit + kill switch
-- [ ] resolution unit tests (global − disabled, ordering, failures excluded)
-- [ ] collision drop, `allowDynamicExtensionTools`
-- [ ] UI bridge events + `ui-response` route + snapshot-surviving dialogs
-- [ ] extension commands in `/`; **delete all approval-gate code + `confirmDangerous`**
-- [ ] **Gate:** `16-extensions#10.1–10.10`
+- [x] probe enumeration, registry refresh, `extensions_changed`
+- [x] auto-register `~/.pi/agent/extensions/*.ts`
+- [x] install paths (paste/URL-then-review/register) + probe gate + step-up + audit + kill switch
+- [x] resolution unit tests (global − disabled, ordering, failures excluded)
+- [x] collision drop, `allowDynamicExtensionTools`
+- [x] UI bridge events + `ui-response` route + snapshot-surviving dialogs
+- [x] extension commands in `/`; **no approval-gate code, no `confirmDangerous` (grep-tested)**
+- [x] **Gate:** `16-extensions#10.1–10.10`
 
 ## M6 — skills & tools UI
 - [ ] skill CRUD + files + import + rescan + validate + trash + counts

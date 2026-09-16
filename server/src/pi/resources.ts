@@ -63,6 +63,11 @@ export interface ResourceLoaderInput {
 	 * first — pi expands with `templates.find(…)` (spike plan/spikes/10 §3).
 	 */
 	prompts?: PiuiPromptTemplate[];
+	/**
+	 * spec/16-extensions.md §1 — exactly these extensions, additive even with `noExtensions`.
+	 * A project's `.pi/extensions` is never among them, trusted workspace or not (§2.2).
+	 */
+	extensionPaths?: string[];
 }
 
 /**
@@ -76,8 +81,9 @@ export async function createResourceLoader(
 		cwd: input.cwd,
 		agentDir: input.agentDir,
 		settingsManager: input.settingsManager,
-		additionalExtensionPaths: [],
+		additionalExtensionPaths: input.extensionPaths ?? [],
 		extensionFactories: [],
+		// Ambient discovery stays off: piui passes the resolved set explicitly (spec/16 §1).
 		noExtensions: true,
 		noSkills: true,
 		noPromptTemplates: true,

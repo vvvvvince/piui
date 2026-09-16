@@ -39,6 +39,9 @@ export function isAdminOnly(method: HttpMethod, url: string): boolean {
  */
 export function requiresStepUp(method: HttpMethod, url: string): boolean {
 	const path = strip(url);
+	// spec/16-extensions.md §7.4.1 — installing, editing, deleting or toggling an extension is
+	// running code on this machine: every mutation is step-up gated, reads are not.
+	if (path === "/api/extensions" || path.startsWith("/api/extensions/")) return method !== "GET";
 	if (!(path === "/api/providers" || path.startsWith("/api/providers/"))) return false;
 	return !(method === "GET" && path === "/api/providers");
 }

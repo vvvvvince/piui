@@ -24,6 +24,9 @@ const PROFILE_BODY = {
 		skillIds: { type: "array", items: { type: "string" } },
 		toolNames: { type: "array", items: { type: "string" } },
 		includeDiscoveredSkills: { type: "boolean" },
+		// spec/16-extensions.md §3 — the per-profile opt-out list and the dynamic-tools switch.
+		disabledExtensionIds: { type: "array", items: { type: "string" } },
+		allowDynamicExtensionTools: { type: "boolean" },
 		memory: {
 			type: "object",
 			additionalProperties: false,

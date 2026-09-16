@@ -1,6 +1,6 @@
 // SessionHub — one LiveSession per conversation, the SSE ring buffer, the run semaphore and
 // idle eviction. spec/01-architecture.md §§4.4-4.5, spec/09-api.md §9.
-import type { ConversationRuntimeState, UiEvent, UiMessage } from "@piui/shared";
+import type { ConversationRuntimeState, UiEvent, UiMessage, UiRequest } from "@piui/shared";
 import { ApiError } from "../http/errors.js";
 import type { GlobalEventBus } from "./bus.js";
 import { EventProjector, type ProjectedEvent } from "./event-map.js";
@@ -63,10 +63,29 @@ export interface HubDeps {
  * the session (spec/07-chat-mode.md §3) and an attached SSE stream must keep working across
  * that swap — and `Last-Event-ID` must keep meaning the same thing.
  */
+/** What a `ui-response` carries back (spec/16-extensions.md §5). */
+export interface UiAnswer {
+	value?: string;
+	confirmed?: boolean;
+	cancelled?: boolean;
+}
+
+interface PendingUiRequest {
+	request: UiRequest;
+	resolve(answer: UiAnswer): void;
+	timer?: NodeJS.Timeout;
+}
+
 export class ConversationChannel {
 	private readonly ring: UiEvent[] = [];
 	private ringBytes = 0;
 	private readonly subscribers = new Set<(event: UiEvent) => void>();
+	/**
+	 * Extension dialogs waiting for an answer. They live on the **channel**, not the session:
+	 * the channel outlives a session swap, which is what lets a pending dialog survive a reload
+	 * and be answered from another tab (spec/16-extensions.md §5).
+	 */
+	private readonly pendingUi = new Map<string, PendingUiRequest>();
 	seq = 0;
 
 	get subscriberCount(): number {
@@ -102,6 +121,47 @@ export class ConversationChannel {
 		return () => {
 			this.subscribers.delete(listener);
 		};
+	}
+
+	// ---------------------------------------------- the extension UI bridge
+
+	get pendingUiRequests(): UiRequest[] {
+		return [...this.pendingUi.values()].map((entry) => entry.request);
+	}
+
+	/** Emits `ui_request` and resolves when a tab answers — or when the timeout expires. */
+	ask(request: UiRequest): Promise<UiAnswer> {
+		return new Promise<UiAnswer>((resolve) => {
+			const entry: PendingUiRequest = { request, resolve };
+			if (request.timeoutMs && request.timeoutMs > 0) {
+				// spec §5: honour pi's timeout by auto-resolving "no answer" (undefined / false).
+				entry.timer = setTimeout(
+					() => this.resolveUi(request.requestId, { cancelled: true }),
+					request.timeoutMs,
+				);
+				entry.timer.unref?.();
+			}
+			this.pendingUi.set(request.requestId, entry);
+			this.emit({ type: "ui_request", ...request });
+		});
+	}
+
+	/** True when the request existed; a second tab answering twice is a no-op, not a 404. */
+	resolveUi(requestId: string, answer: UiAnswer): boolean {
+		const entry = this.pendingUi.get(requestId);
+		if (!entry) return false;
+		this.pendingUi.delete(requestId);
+		if (entry.timer) clearTimeout(entry.timer);
+		entry.resolve(answer);
+		this.emit({ type: "ui_request_resolved", requestId });
+		return true;
+	}
+
+	/** The session went away: every waiting extension promise resolves as cancelled (§5). */
+	cancelPendingUi(): void {
+		for (const requestId of [...this.pendingUi.keys()]) {
+			this.resolveUi(requestId, { cancelled: true });
+		}
 	}
 }
 
@@ -188,7 +248,14 @@ export class LiveSession {
 	}
 
 	snapshot(): UiEvent {
-		return { type: "snapshot", seq: this.seq, messages: this.messages(), state: this.state };
+		const pendingUiRequests = this.channel.pendingUiRequests;
+		return {
+			type: "snapshot",
+			seq: this.seq,
+			messages: this.messages(),
+			state: this.state,
+			...(pendingUiRequests.length > 0 ? { pendingUiRequests } : {}),
+		};
 	}
 
 	replay(since: number): UiEvent[] | undefined {
@@ -326,6 +393,7 @@ export class LiveSession {
 	dispose(): void {
 		this.stopRunTimer();
 		this.stopFlushTimer();
+		this.channel.cancelPendingUi();
 		this.unsubscribe();
 		this.handle.dispose();
 	}

@@ -93,6 +93,10 @@ const BUILTINS: readonly Omit<CommandDescriptor, "display" | "source">[] = [
 export interface CommandServiceDeps {
 	skills: SkillCatalog;
 	profiles: ProfileService;
+	/** spec/16-extensions.md §4 — the commands the conversation's extensions registered. */
+	extensions: {
+		resolveFor(options: { profileId?: string | null }): { commandNames: string[] };
+	};
 	/** Drops the live sessions holding the old template set, and tells the clients. */
 	onRescan?(): void;
 }
@@ -186,6 +190,20 @@ export class CommandService {
 			} catch {
 				/* a deleted profile leaves the transcript readable (spec/03-profiles.md §7) */
 			}
+		}
+
+		// spec/16-extensions.md §4 — pi dispatches these itself inside `prompt()` (spike S9 §4),
+		// so the client only has to send the text, even while streaming.
+		for (const name of this.deps.extensions.resolveFor({ profileId: row.profile_id })
+			.commandNames) {
+			items.push({
+				name,
+				display: `/${name}`,
+				description: "Registered by an extension",
+				source: "extension",
+				kind: "expand",
+				availableWhileStreaming: true,
+			});
 		}
 
 		for (const template of this.prompts(row.workspace_id).templates) {

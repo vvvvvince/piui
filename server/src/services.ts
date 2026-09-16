@@ -4,6 +4,7 @@
 import { CommandService } from "./commands/service.js";
 import type { AppContext } from "./context.js";
 import { ConversationService } from "./conversations/service.js";
+import { ExtensionService } from "./extensions/service.js";
 import { installedBuiltinToolNames } from "./pi/builtin-tools.js";
 import { CredentialService } from "./pi/credentials.js";
 import type { FakeModelHandle } from "./pi/fake-model.js";
@@ -28,6 +29,8 @@ export interface Services {
 	conversations: ConversationService;
 	/** The `/` command surface and prompt-template composition (spec/15 §§1-3). */
 	commands: CommandService;
+	/** Extension enumeration, install flows and resolution (spec/16 §§2-4). */
+	extensions: ExtensionService;
 	profiles: ProfileService;
 	skills: SkillCatalog;
 	/** The per-profile memory file store; owns the append mutex. */
@@ -54,11 +57,16 @@ export async function createServices(ctx: AppContext): Promise<Services> {
 		fetch: ctx.fetch,
 		nowMs: () => ctx.clock.nowMs(),
 	});
-	const tools = new ToolRegistry({ repos: ctx.repos, search, logger: ctx.logger });
+	const extensions = new ExtensionService(ctx, {
+		// spec/16-extensions.md §7.3: changes apply to **new** conversations, so live sessions are
+		// deliberately not dropped (a dropped session would lose its pending ui_requests).
+		onChanged: () => events.emit({ type: "extensions_changed" }),
+	});
+	const tools = new ToolRegistry({ repos: ctx.repos, search, logger: ctx.logger, extensions });
 	tools.validateAgainstPi(installedBuiltinToolNames());
 	const skills = new SkillCatalog(ctx);
 	const memory = new MemoryStore();
-	const profiles = new ProfileService(ctx, { tools, skills, memory });
+	const profiles = new ProfileService(ctx, { tools, skills, memory, extensions });
 	profiles.seedIfEmpty();
 	const models = new ModelService({ runtime, nowMs: () => ctx.clock.nowMs() });
 	const credentials = new CredentialService({
@@ -94,6 +102,7 @@ export async function createServices(ctx: AppContext): Promise<Services> {
 		hub,
 		search,
 		tools,
+		extensions,
 		profiles,
 		skills,
 		memory,
@@ -106,6 +115,7 @@ export async function createServices(ctx: AppContext): Promise<Services> {
 		commands: new CommandService(ctx, {
 			skills,
 			profiles,
+			extensions,
 			// A rescan changes what every session's ResourceLoader holds.
 			onRescan: () => {
 				hub.dropAll();

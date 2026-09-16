@@ -118,7 +118,7 @@ describe("runaway guards", () => {
 		});
 	});
 
-	it("contains no approval-gate machinery at all (spec/08-agent-mode.md §6, decision Q3)", () => {
+	it("[16-extensions#10.10] contains no approval-gate machinery at all (spec/08-agent-mode.md §6, decision Q3)", () => {
 		const files = execFileSync("git", ["ls-files", "server/src", "client/src", "shared/src"], {
 			cwd: new URL("../../..", import.meta.url).pathname,
 			encoding: "utf8",
@@ -127,7 +127,10 @@ describe("runaway guards", () => {
 			.filter(Boolean);
 		const offenders = files.filter((file) => {
 			const source = readFileSync(new URL(`../../../${file}`, import.meta.url).pathname, "utf8");
-			return /\bApprove\b|\bDeny\b|requireApproval|confirmBeforeTool|toolDenylist/.test(source);
+			// `confirmDangerous` / `confirm_dangerous` are the deleted gating field (spec/16 §8).
+			return /\bApprove\b|\bDeny\b|requireApproval|confirmBeforeTool|toolDenylist|confirmDangerous|confirm_dangerous/.test(
+				source,
+			);
 		});
 		expect(offenders).toEqual([]);
 	});

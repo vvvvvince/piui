@@ -1,6 +1,12 @@
 // spec/10-frontend.md §3 — the streaming hook. The reducer is exported so its normative rules
 // are testable without an EventSource.
-import type { ConversationRuntimeState, UiBlock, UiEvent, UiMessage } from "@piui/shared";
+import type {
+	ConversationRuntimeState,
+	UiBlock,
+	UiEvent,
+	UiMessage,
+	UiRequest,
+} from "@piui/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export interface StreamState {
@@ -10,6 +16,11 @@ export interface StreamState {
 	usage: { tokensTotal: number; costTotal: number } | null;
 	title: string | null;
 	notices: { level: "info" | "warning" | "error"; text: string }[];
+	/** Extension dialogs waiting for an answer (spec/16-extensions.md §5). */
+	uiRequests: UiRequest[];
+	/** `setStatus` badges and `setWidget` blocks, keyed by the extension's key. */
+	statuses: { key: string; text: string }[];
+	widgets: { key: string; lines: string[]; placement: "aboveEditor" | "belowEditor" }[];
 	lastSeq: number;
 	doneCount: number;
 }
@@ -28,6 +39,9 @@ export function emptyStreamState(): StreamState {
 		usage: null,
 		title: null,
 		notices: [],
+		uiRequests: [],
+		statuses: [],
+		widgets: [],
 		lastSeq: 0,
 		doneCount: 0,
 	};
@@ -58,7 +72,40 @@ export function applyEvent(state: StreamState, event: UiEvent): StreamState {
 				...state,
 				messages: event.messages,
 				state: event.state,
+				// A reload must re-render a dialog that is still waiting (spec/16 §5).
+				uiRequests: event.pendingUiRequests ?? [],
 				lastSeq: event.seq,
+			};
+		case "ui_request": {
+			const { type: _type, seq: _seq, ...request } = event;
+			return { ...state, uiRequests: [...state.uiRequests, request], lastSeq: seq };
+		}
+		case "ui_request_resolved":
+			// Another tab answered: close ours.
+			return {
+				...state,
+				uiRequests: state.uiRequests.filter((request) => request.requestId !== event.requestId),
+				lastSeq: seq,
+			};
+		case "status":
+			return {
+				...state,
+				statuses: [
+					...state.statuses.filter((status) => status.key !== event.key),
+					...(event.text === null ? [] : [{ key: event.key, text: event.text }]),
+				],
+				lastSeq: seq,
+			};
+		case "widget":
+			return {
+				...state,
+				widgets: [
+					...state.widgets.filter((widget) => widget.key !== event.key),
+					...(event.lines === null
+						? []
+						: [{ key: event.key, lines: event.lines, placement: event.placement }]),
+				],
+				lastSeq: seq,
 			};
 		case "state":
 			return { ...state, state: event.state, lastSeq: seq };

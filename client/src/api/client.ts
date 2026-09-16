@@ -1,12 +1,27 @@
 // Typed fetch wrapper: always sends X-Requested-With, always unwraps the error envelope,
 // and carries the two auth interceptors of spec/06-auth.md §6 / spec/14-credentials.md §5.
 import type {
+	AbortResponse,
 	ApiErrorBody,
 	ApiErrorCode,
+	AuthFlowView,
+	ConversationDetail,
+	ConversationStatsResponse,
+	ConversationSummary,
+	CreateConversationRequest,
+	CreateConversationResponse,
 	HealthResponse,
 	LoginResponse,
 	MeResponse,
+	MessagesResponse,
 	MetaResponse,
+	ModelsResponse,
+	PatchConversationRequest,
+	PostMessageResponse,
+	ProviderStatus,
+	ProvidersResponse,
+	QueueResponse,
+	VerifyProviderResponse,
 } from "@piui/shared";
 
 export class ApiClientError extends Error {
@@ -104,4 +119,42 @@ export const api = {
 	logout: () => request<void>("/auth/logout", { method: "POST" }),
 	stepUp: (password: string) =>
 		request<void>("/auth/step-up", { method: "POST", body: { password } }),
+
+	// ------------------------------------------------- models & credentials
+	models: (refresh = false) => request<ModelsResponse>(`/models${refresh ? "?refresh=1" : ""}`),
+	providers: () => request<ProvidersResponse>("/providers"),
+	startAuth: (providerId: string, body: { apiKey?: string } = {}) =>
+		request<AuthFlowView>(`/providers/${providerId}/auth/start`, { method: "POST", body }),
+	respondAuth: (providerId: string, body: { flowId: string; promptId: string; value: string }) =>
+		request<AuthFlowView>(`/providers/${providerId}/auth/respond`, { method: "POST", body }),
+	cancelAuth: (providerId: string, flowId: string) =>
+		request<AuthFlowView>(`/providers/${providerId}/auth/cancel`, {
+			method: "POST",
+			body: { flowId },
+		}),
+	pollAuth: (flowId: string, since: number) =>
+		request<AuthFlowView>(`/providers/auth-flows/${flowId}?wait=25000&since=${since}`),
+	deleteAuth: (providerId: string) =>
+		request<ProviderStatus>(`/providers/${providerId}/auth`, { method: "DELETE" }),
+	verifyProvider: (providerId: string) =>
+		request<VerifyProviderResponse>(`/providers/${providerId}/verify`, { method: "POST" }),
+
+	// ---------------------------------------------------------- conversations
+	conversations: () =>
+		request<{ items: ConversationSummary[]; nextCursor: string | null }>("/conversations"),
+	createConversation: (body: CreateConversationRequest) =>
+		request<CreateConversationResponse>("/conversations", { method: "POST", body }),
+	conversation: (id: string) => request<ConversationDetail>(`/conversations/${id}`),
+	conversationMessages: (id: string) => request<MessagesResponse>(`/conversations/${id}/messages`),
+	patchConversation: (id: string, body: PatchConversationRequest) =>
+		request<ConversationDetail>(`/conversations/${id}`, { method: "PATCH", body }),
+	deleteConversation: (id: string) => request<void>(`/conversations/${id}`, { method: "DELETE" }),
+	sendMessage: (id: string, body: { text: string; streamingBehavior?: "steer" | "followUp" }) =>
+		request<PostMessageResponse>(`/conversations/${id}/messages`, { method: "POST", body }),
+	abortConversation: (id: string) =>
+		request<AbortResponse>(`/conversations/${id}/abort`, { method: "POST" }),
+	clearQueue: (id: string) =>
+		request<QueueResponse>(`/conversations/${id}/queue/clear`, { method: "POST" }),
+	conversationStats: (id: string) =>
+		request<ConversationStatsResponse>(`/conversations/${id}/stats`),
 };

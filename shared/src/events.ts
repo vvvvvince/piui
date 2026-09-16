@@ -29,6 +29,11 @@ export interface UiMessage {
 	model?: string;
 	createdAt: string;
 	streaming?: boolean;
+	/**
+	 * The run was aborted while this message was being produced: the partial text stays in the
+	 * transcript, marked "stopped" (spec/07-chat-mode.md §6.6).
+	 */
+	stopped?: true;
 }
 
 export interface ConversationRuntimeState {

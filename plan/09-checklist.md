@@ -24,7 +24,7 @@ Rule for every line below: **failing test first**, then code, then refactor, com
 - [x] S3 `createAgentSession` shape + `SettingsManager.inMemory`
 - [x] S4 `AgentSessionEvent` union
 - [x] S5 session `.jsonl` + `SessionManager`
-- [ ] S6 credentials / `AuthFlow` surface (M2)
+- [x] S6 credentials / `AuthFlow` surface (`plan/spikes/06-credentials-and-auth-flow.md`)
 - [x] S7 steer / followUp / abort / preflight (typings verified; behavior re-checked in M2)
 - [ ] S8 skill commands + prompt templates (M5b)
 - [ ] S9 `bindExtensions` + `additionalExtensionPaths` (M5c)
@@ -56,18 +56,19 @@ Rule for every line below: **failing test first**, then code, then refactor, com
 - [x] **Gate:** `06-auth#8`, `14-credentials#9.7`, `18-multi-user#9.1–9.8`
 
 ## M2 — credentials, bridge, streaming, chat
-- [ ] `CredentialService` + `AuthFlow`; credential routes; secret-hygiene test; `0600`
-- [ ] `/settings/providers` UI
-- [ ] `ModelService` + `GET /api/models` (cache + revision + `?refresh=1`)
-- [ ] `pi/resources.ts` + ambient-suppression test
-- [ ] `pi/agent-runner.ts` `createSession` (chat: empty tools, scratch cwd, prompt override)
-- [ ] `SessionHub` + ring buffer + seq + eviction + run semaphore
-- [ ] `event-map.ts` (coalescing) + `transcript.ts` (merged tool blocks) + fixtures
-- [ ] SSE route: snapshot / `Last-Event-ID` replay / stale→snapshot / 20 s ping
-- [ ] conversation routes incl. abort-with-restore, queue clear, stats, auto-title
-- [ ] chat UI + `useConversationStream` + markdown sanitization + context/cost
-- [ ] TUI-parity input + `HotkeysDialog`
-- [ ] **Gate:** `14-credentials#9.{1,2,3,6,8,10}`, `07-chat-mode#6.{1,5,6}`
+- [x] `CredentialService` + `AuthFlow`; credential routes; secret-hygiene test; `0600`
+- [x] `/settings/providers` UI
+- [x] `ModelService` + `GET /api/models` (cache + revision + `?refresh=1`)
+- [x] `pi/resources.ts` + ambient-suppression test
+- [x] `pi/agent-runner.ts` `createSession` (chat: empty tools, scratch cwd, prompt override)
+- [x] `SessionHub` + ring buffer + seq + eviction + run semaphore
+- [x] `event-map.ts` (coalescing) + `transcript.ts` (merged tool blocks) + fixtures
+- [x] SSE route: snapshot / `Last-Event-ID` replay / stale→snapshot / 20 s ping
+- [x] conversation routes incl. abort-with-restore, queue clear, stats, auto-title
+- [x] chat UI + `useConversationStream` + markdown sanitization + context/cost
+- [x] TUI-parity input + `HotkeysDialog`
+- [x] **Gate:** `14-credentials#9.{1,2,3,6,8,10}`, `07-chat-mode#6.{1,5,6}` — plus 9.4/9.5/9.9
+      and `19-deployment#9.3`, which the stub-provider seam made testable early
 
 ## M3 — web search & tool runtime
 - [ ] `WebSearchProvider` (brave + one alternative + `none`)

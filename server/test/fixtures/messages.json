@@ -1,0 +1,91 @@
+[
+	{
+		"role": "user",
+		"content": [
+			{
+				"type": "text",
+				"text": "write hello.txt"
+			}
+		],
+		"timestamp": 1700000000000
+	},
+	{
+		"role": "assistant",
+		"content": [
+			{
+				"type": "thinking",
+				"thinking": "The user wants a file. I will write it.",
+				"thinkingSignature": ""
+			},
+			{
+				"type": "toolCall",
+				"id": "call_1_1",
+				"name": "write",
+				"arguments": {
+					"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+					"content": "hi"
+				}
+			}
+		],
+		"api": "openai-completions",
+		"provider": "piui-fake",
+		"model": "fake-1",
+		"usage": {
+			"input": 10,
+			"output": 20,
+			"cacheRead": 0,
+			"cacheWrite": 0,
+			"totalTokens": 30,
+			"cost": {
+				"input": 0.001,
+				"output": 0.002,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"total": 0.003
+			}
+		},
+		"stopReason": "toolUse",
+		"timestamp": 1700000000000
+	},
+	{
+		"role": "toolResult",
+		"toolCallId": "call_1_1",
+		"toolName": "write",
+		"content": [
+			{
+				"type": "text",
+				"text": "Successfully wrote to /tmp/piui-fixture/scratch/fixture/hello.txt"
+			}
+		],
+		"isError": false,
+		"timestamp": 1700000000000
+	},
+	{
+		"role": "assistant",
+		"content": [
+			{
+				"type": "text",
+				"text": "Wrote hello.txt for you."
+			}
+		],
+		"api": "openai-completions",
+		"provider": "piui-fake",
+		"model": "fake-1",
+		"usage": {
+			"input": 10,
+			"output": 20,
+			"cacheRead": 0,
+			"cacheWrite": 0,
+			"totalTokens": 30,
+			"cost": {
+				"input": 0.001,
+				"output": 0.002,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"total": 0.003
+			}
+		},
+		"stopReason": "stop",
+		"timestamp": 1700000000000
+	}
+]

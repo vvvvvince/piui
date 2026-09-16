@@ -29,6 +29,16 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
 	rate_limited: 429,
 	provider_not_configured: 400,
 	step_up_required: 403,
+	provider_not_found: 404,
+	provider_ambient_only: 409,
+	auth_type_not_supported: 501,
+	too_many_flows: 429,
+	flow_not_found: 404,
+	flow_not_prompting: 409,
+	flow_prompt_mismatch: 409,
+	credential_not_removable: 409,
+	credential_writes_disabled: 403,
+	insecure_transport: 403,
 	internal_error: 500,
 };
 

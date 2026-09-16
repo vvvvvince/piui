@@ -165,3 +165,140 @@ and `repository scoping > keeps workspaces scoped the same way` failed by name (
 - `14-credentials#9.{1–6,8–10}` are parked in `pending` → M2; only §9.7 is due at M1.
 - Rate-limit state is per-process in memory, as specified; credential-mutation limits
   (20/hour/session, `14-credentials` §5) are still to do with the credential routes.
+
+---
+
+## M2 — Credentials, pi bridge, streaming, chat mode ✅
+
+**Shipped**
+
+- *Spike S6* (`plan/spikes/06-credentials-and-auth-flow.md`) before the adapter: pi writes
+  `auth.json` itself at `0600`, `getProviderAuthStatus()` is an async-refreshed **snapshot**
+  (so the shared runtime is created with `refreshOnCreate: true, allowModelNetwork: false`),
+  `logout()` on an env-sourced provider silently succeeds, no built-in provider in 0.85.1 is
+  ambient-only or multi-prompt, and `refresh().errors` is a `Map`, not an object.
+- `server/src/pi/runtime.ts` — the one process-wide `ModelRuntime` (`authPath: config.piAuthPath`),
+  registering the scripted fake provider only under `PIUI_FAKE_MODEL=1`.
+- `server/src/pi/credentials.ts` — `CredentialService` + the `AuthFlow` machine: prefill
+  auto-answer for the first `secret` prompt (one request for the paste-a-key case), one pending
+  prompt at a time, `promptId` match, 5 min idle TTL, 60 s terminal retention, 3 flows/provider
+  and 10 overall, cancel → `cancelled`, `CredentialSynchronizationError` → success-with-warning,
+  post-login `checkAuth` → `refresh` (15 s) → `getAvailable` → cache invalidation +
+  `providers_changed` + `provider_login` audit line, and a message sanitizer
+  (`/\b(sk|pat|ghp|xoxb|gsk|api)[-_]…/` → `***`, plus the answers we were handed).
+- `server/src/pi/model-service.ts` + `GET /api/models` — 60 s cache, `credentialsRevision`
+  bumped by every mutation, `?refresh=1` with a 15 s deadline and per-provider errors.
+- Credential routes per `14-credentials` §3 with the write guard: `credential_writes_disabled`,
+  `insecure_transport` (honouring `X-Forwarded-Proto` and `PIUI_INSECURE_TRANSPORT_OK`) and a
+  20/hour/session mutation limiter.
+- `server/src/pi/resources.ts` — the fixed chat system prompt (§2 of `07-chat-mode`) and a
+  `DefaultResourceLoader` with every ambient source suppressed;
+  `server/src/pi/agent-runner.ts` — `createSession({ config, sessionManager })` exactly as
+  `01-architecture` §4.1, `noTools: "all"` for chat, `SessionManager` always given
+  `config.sessionsDir`.
+- `server/src/session/` — `transcript.ts` (pi messages → `UiMessage[]`, tool call + result
+  merged, 16 KB output cap, `stopReason:"error"` → `role:"error"`), `event-map.ts`
+  (`assistantMessageEvent` unwrapping, delta coalescing at 50 ms / 1 KB, immutable frames),
+  `hub.ts` (`LiveSession` with a 2000-event / 8 MB ring, strictly increasing `seq`, 15 min idle
+  eviction, one run per conversation + `PIUI_MAX_CONCURRENT_RUNS`), `bus.ts` (global channel).
+- Conversation surface: create (chat only, profile/workspace refused), detail with the **real**
+  composed `systemPromptPreview`, messages, patch (model change → `notice` + fresh session,
+  `409` while streaming), delete (row + session file + scratch + uploads), prompt
+  (`202`/`409 conversation_busy`, never awaits the run), abort (clear queue → abort → wait idle
+  ≤ 5 s), queue clear, stats, auto-title from the first user message (one `completeSimple` call,
+  `title_locked` once the user renames), scratch dirs `0700` + boot sweep.
+- SSE: `GET /api/conversations/:id/events` (snapshot, `Last-Event-ID`/`?since=` replay,
+  stale → snapshot, 20 s ping, `no-cache, no-transform`, `X-Accel-Buffering: no`, identical
+  frames for multiple subscribers) and `GET /api/events` for `providers_changed` /
+  `conversation_*`.
+- Client: `/conversations` (list, empty-state CTAs, skeletons), `NewConversationDialog` +
+  `ModelPicker` (grouped, unavailable greyed with a link to `/settings/providers`), `/c/:id`
+  (transcript with `react-markdown` + `remark-gfm` + `rehype-sanitize`, thinking/tool cards,
+  context meter, cost, reconnect banner, queue chips, notices), `useConversationStream` with the
+  normative application rules, `Composer` with the full TUI-parity key table, `HotkeysDialog`,
+  `/settings/providers` with `ProviderTable` + generic `CredentialDialog` (prompt loop,
+  long-poll while `working`, events incl. `auth_url`/`device_code`) + in-app sign-out confirm.
+- Fixtures: `npm run fixtures:record` writes `server/test/fixtures/{agent-events,messages}.json`
+  + `session.jsonl` from the fake provider; committed and human-reviewed, never regenerated in CI.
+
+**Verified by hand (M2 acceptance)**
+
+1. Browser (Firefox via MCP), dev server on `PIUI_HOME=/tmp/piui-m2-home` + `PIUI_FAKE_MODEL=1`:
+   login → `/conversations` empty state → **New chat** → model picker (the fake provider is the
+   only available model, everything else greyed "no credentials") → chat streams tokens, header
+   shows `ctx 3%` and the running cost, footer shows tokens/cost per message. ✅
+2. `/settings/providers`: 41 providers listed *Not configured*, `authPath` rendered, OAuth
+   buttons disabled with the provider's `loginLabel`. **Add key** on Anthropic → dialog → pasted
+   a fixture key → `Configured (stored)`, `14 models (14 available)`, "Sign out" appeared, and
+   the success state carried the honest warning `(anthropic: fetch failed)` because the host has
+   no network. `auth.json` on disk: mode `0600`, `{"anthropic":{"type":"api_key",…}}`. ✅
+3. Production build: `npm run build && NODE_ENV=production node server/dist/index.js` → SPA 200,
+   login 200, chat created, prompt `202`, transcript + SSE snapshot over one port. ✅
+4. Suite: 146 tests green, offline, ~11 s. ✅
+
+**Deviations / decisions**
+
+- *The long-poll `GET /api/providers/auth-flows/:flowId` stays step-up gated* (the open M1
+  question). It is a read, but it is a read of a credential flow: the same session started that
+  flow less than 5 minutes ago, so the step-up window (10 min) is always still open, and leaving
+  the whole `/api/providers/*` prefix uniformly gated keeps one rule instead of an exception.
+- *`removable` is "a stored credential exists"*, not literally `source === "stored"`: pi reports
+  a stored-but-rejected key as `configured: true, source: "stored"` **and** a stored key whose
+  `resolve()` fails as `configured: true` with 0 available models. Keying off
+  `listCredentials()` is what makes "paste a bad key, then delete it" possible (§2.2 requires it).
+- *`checkAuth()` is the success oracle after `login()`*, not `status.configured`: the snapshot
+  calls a stored credential configured even when the provider refuses it, which would have made
+  acceptance 9.3 report a lie.
+- *`getPendingMessages()` does not exist* (spike S7 read it from the spec): pi 0.85.1 exposes
+  `getSteeringMessages()` / `getFollowUpMessages()` / `pendingMessageCount`, and `waitForIdle()`
+  is what the abort route awaits.
+- *`event-map.ts` / `transcript.ts` use structural pi types*, not `import type` from pi: the
+  `01-architecture` §2.1 grep forbids any `from "@earendil-works/…"` outside `server/src/pi/**`,
+  and the projection layer is exactly where a future RPC backend would be cut.
+- *Delta coalescing uses the real clock*, not `ctx.clock`: with a frozen `FakeClock` the 50 ms
+  rule can never fire, so the flush cadence takes an injectable `now()` defaulting to
+  `Date.now`, and the projection test drives it with a frozen stub to prove the size rule.
+- *A message id is pinned to the pi message object* (`MessageIds`, a `WeakMap`), and
+  `message_end` reuses the id handed out at `message_start`: pi passes a **different** object for
+  the final message, which made every answer render twice. Found in the browser, then covered by
+  an assertion in `chat.test.ts`.
+- *`window.confirm` is banned in piui*: the sign-out confirmation used it, and a native modal
+  froze the whole tab — including the browser-automation bridge. Replaced by an in-app dialog.
+- *`UiMessage` gained `stopped?: true`* so an aborted partial answer can be marked "stopped"
+  (`07-chat-mode` §6.6 asks for it but `02-data-model` §4 has no field for it).
+- *`CredentialService.settleBudgetMs` is public*: pi serializes credential operations per
+  provider, so a second concurrent flow genuinely sits in `working` until the first finishes; the
+  concurrency test lowers the budget instead of waiting out 10 s twice.
+- *Migration `002`* adds `conversations.title_locked` and `conversations.timezone`
+  (decision Q8 + `07-chat-mode` §2's `{{TZ}}`).
+- *`waitUntil` lives in `server/test/support/async.ts`*: a real `AgentSession` streams on real
+  timers, and the suite-hygiene grep (rightly) forbids `setTimeout` sleeps inside test files.
+- Scope honestly deferred: web tools/`Sources` footer (M3), image attachments (M6), `/` command
+  menu and prompt templates (M5b), compaction endpoint, export, `Alt+T`/`Alt+O`/`Alt+M`/`Alt+P`
+  global toggles and `Ctrl+G` editor modal (the `HotkeysDialog` lists them; M5b/M7).
+
+**Mutation spot-check (§9.6)** — two mutants, both caught by name:
+
+1. dropped `if (since > this.seq) return undefined` from `LiveSession.replay` (a cursor from a
+   previous process would silently get nothing instead of a snapshot) ⇒
+   `[01-architecture#4.4] stamps strictly increasing seq numbers and replays from the ring` and
+   `[09-api#9.1] replays from Last-Event-ID and falls back to a snapshot when it is stale`
+   failed (2 failed, 118 passed).
+2. `removable: true` for every provider in `CredentialService.statusOf` ⇒
+   `[14-credentials#9.1] lists every provider as not configured when there are no credentials`
+   and `[14-credentials#9.5] refuses key entry and deletion for credentials piui does not own`
+   failed (2 failed, 68 passed). Both reverted. ✅
+
+**Open for M3**
+
+- `resolveChatTools()` returns `[]` for both toggle states; M3 fills in `web_search`/`web_fetch`
+  as `customTools` (the prompt block and the `webSearch` column already switch correctly).
+- The sign-out confirmation dialog was rewritten *after* the browser session wedged on the old
+  `window.confirm`, so it is covered by the integration test but not yet re-clicked by hand —
+  do that first thing in M3 (it is two clicks).
+- `GET /api/models` ships 1355 models in ~390 KB; the picker renders it, but first paint of the
+  dialog is visibly slow. M3/M7 should paginate or filter server-side (`?available=1`).
+- `POST /api/conversations/:id/compact`, `GET …/export`, uploads and the global sidebar badge
+  wiring are still absent; `/api/events` exists and is used only for `providers_changed`.
+- Auto-title consumes one turn of the fake provider's script, so tests that care about script
+  ordering must either pass an explicit `title` or script the extra turn.

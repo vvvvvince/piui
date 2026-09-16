@@ -1,0 +1,1967 @@
+[
+	{
+		"type": "agent_start"
+	},
+	{
+		"type": "turn_start"
+	},
+	{
+		"type": "message_start",
+		"message": {
+			"role": "user",
+			"content": [
+				{
+					"type": "text",
+					"text": "write hello.txt"
+				}
+			],
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_end",
+		"message": {
+			"role": "user",
+			"content": [
+				{
+					"type": "text",
+					"text": "write hello.txt"
+				}
+			],
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_start",
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "thinking_start",
+			"contentIndex": 0,
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "thinking_delta",
+			"contentIndex": 0,
+			"delta": "The u",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "thinking_delta",
+			"contentIndex": 0,
+			"delta": "ser w",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "thinking_delta",
+			"contentIndex": 0,
+			"delta": "ants ",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "thinking_delta",
+			"contentIndex": 0,
+			"delta": "a fil",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "thinking_delta",
+			"contentIndex": 0,
+			"delta": "e. I ",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "thinking_delta",
+			"contentIndex": 0,
+			"delta": "will ",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "thinking_delta",
+			"contentIndex": 0,
+			"delta": "write",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "thinking_delta",
+			"contentIndex": 0,
+			"delta": " it.",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "thinking_end",
+			"contentIndex": 0,
+			"content": "The user wants a file. I will write it.",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "toolcall_start",
+			"contentIndex": 1,
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "toolcall_delta",
+			"contentIndex": 1,
+			"delta": "{\"path\":\"/tmp/piui-fixture/scratch/fixture/hello.txt\",\"content\":\"hi\"}",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "toolcall_end",
+			"contentIndex": 1,
+			"toolCall": {
+				"type": "toolCall",
+				"id": "call_1_1",
+				"name": "write",
+				"arguments": {
+					"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+					"content": "hi"
+				}
+			},
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_end",
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "tool_execution_start",
+		"toolCallId": "call_1_1",
+		"toolName": "write",
+		"args": {
+			"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+			"content": "hi"
+		}
+	},
+	{
+		"type": "tool_execution_end",
+		"toolCallId": "call_1_1",
+		"toolName": "write",
+		"result": {
+			"content": [
+				{
+					"type": "text",
+					"text": "Successfully wrote to /tmp/piui-fixture/scratch/fixture/hello.txt"
+				}
+			]
+		},
+		"isError": false
+	},
+	{
+		"type": "message_start",
+		"message": {
+			"role": "toolResult",
+			"toolCallId": "call_1_1",
+			"toolName": "write",
+			"content": [
+				{
+					"type": "text",
+					"text": "Successfully wrote to /tmp/piui-fixture/scratch/fixture/hello.txt"
+				}
+			],
+			"isError": false,
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_end",
+		"message": {
+			"role": "toolResult",
+			"toolCallId": "call_1_1",
+			"toolName": "write",
+			"content": [
+				{
+					"type": "text",
+					"text": "Successfully wrote to /tmp/piui-fixture/scratch/fixture/hello.txt"
+				}
+			],
+			"isError": false,
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "turn_end",
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "thinking",
+					"thinking": "The user wants a file. I will write it.",
+					"thinkingSignature": ""
+				},
+				{
+					"type": "toolCall",
+					"id": "call_1_1",
+					"name": "write",
+					"arguments": {
+						"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+						"content": "hi"
+					}
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "toolUse",
+			"timestamp": 1700000000000
+		},
+		"toolResults": [
+			{
+				"role": "toolResult",
+				"toolCallId": "call_1_1",
+				"toolName": "write",
+				"content": [
+					{
+						"type": "text",
+						"text": "Successfully wrote to /tmp/piui-fixture/scratch/fixture/hello.txt"
+					}
+				],
+				"isError": false,
+				"timestamp": 1700000000000
+			}
+		]
+	},
+	{
+		"type": "turn_start"
+	},
+	{
+		"type": "message_start",
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "text",
+					"text": "Wrote hello.txt for you."
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "stop",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "text_start",
+			"contentIndex": 0,
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "text",
+						"text": "Wrote hello.txt for you."
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "stop",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "text",
+					"text": "Wrote hello.txt for you."
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "stop",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "text_delta",
+			"contentIndex": 0,
+			"delta": "Wrote",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "text",
+						"text": "Wrote hello.txt for you."
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "stop",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "text",
+					"text": "Wrote hello.txt for you."
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "stop",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "text_delta",
+			"contentIndex": 0,
+			"delta": " hell",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "text",
+						"text": "Wrote hello.txt for you."
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "stop",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "text",
+					"text": "Wrote hello.txt for you."
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "stop",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "text_delta",
+			"contentIndex": 0,
+			"delta": "o.txt",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "text",
+						"text": "Wrote hello.txt for you."
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "stop",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "text",
+					"text": "Wrote hello.txt for you."
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "stop",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "text_delta",
+			"contentIndex": 0,
+			"delta": " for ",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "text",
+						"text": "Wrote hello.txt for you."
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "stop",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "text",
+					"text": "Wrote hello.txt for you."
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "stop",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "text_delta",
+			"contentIndex": 0,
+			"delta": "you.",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "text",
+						"text": "Wrote hello.txt for you."
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "stop",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "text",
+					"text": "Wrote hello.txt for you."
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "stop",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_update",
+		"assistantMessageEvent": {
+			"type": "text_end",
+			"contentIndex": 0,
+			"content": "Wrote hello.txt for you.",
+			"partial": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "text",
+						"text": "Wrote hello.txt for you."
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "stop",
+				"timestamp": 1700000000000
+			}
+		},
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "text",
+					"text": "Wrote hello.txt for you."
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "stop",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "message_end",
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "text",
+					"text": "Wrote hello.txt for you."
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "stop",
+			"timestamp": 1700000000000
+		}
+	},
+	{
+		"type": "turn_end",
+		"message": {
+			"role": "assistant",
+			"content": [
+				{
+					"type": "text",
+					"text": "Wrote hello.txt for you."
+				}
+			],
+			"api": "openai-completions",
+			"provider": "piui-fake",
+			"model": "fake-1",
+			"usage": {
+				"input": 10,
+				"output": 20,
+				"cacheRead": 0,
+				"cacheWrite": 0,
+				"totalTokens": 30,
+				"cost": {
+					"input": 0.001,
+					"output": 0.002,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"total": 0.003
+				}
+			},
+			"stopReason": "stop",
+			"timestamp": 1700000000000
+		},
+		"toolResults": []
+	},
+	{
+		"type": "agent_end",
+		"messages": [
+			{
+				"role": "user",
+				"content": [
+					{
+						"type": "text",
+						"text": "write hello.txt"
+					}
+				],
+				"timestamp": 1700000000000
+			},
+			{
+				"role": "assistant",
+				"content": [
+					{
+						"type": "thinking",
+						"thinking": "The user wants a file. I will write it.",
+						"thinkingSignature": ""
+					},
+					{
+						"type": "toolCall",
+						"id": "call_1_1",
+						"name": "write",
+						"arguments": {
+							"path": "/tmp/piui-fixture/scratch/fixture/hello.txt",
+							"content": "hi"
+						}
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "toolUse",
+				"timestamp": 1700000000000
+			},
+			{
+				"role": "toolResult",
+				"toolCallId": "call_1_1",
+				"toolName": "write",
+				"content": [
+					{
+						"type": "text",
+						"text": "Successfully wrote to /tmp/piui-fixture/scratch/fixture/hello.txt"
+					}
+				],
+				"isError": false,
+				"timestamp": 1700000000000
+			},
+			{
+				"role": "assistant",
+				"content": [
+					{
+						"type": "text",
+						"text": "Wrote hello.txt for you."
+					}
+				],
+				"api": "openai-completions",
+				"provider": "piui-fake",
+				"model": "fake-1",
+				"usage": {
+					"input": 10,
+					"output": 20,
+					"cacheRead": 0,
+					"cacheWrite": 0,
+					"totalTokens": 30,
+					"cost": {
+						"input": 0.001,
+						"output": 0.002,
+						"cacheRead": 0,
+						"cacheWrite": 0,
+						"total": 0.003
+					}
+				},
+				"stopReason": "stop",
+				"timestamp": 1700000000000
+			}
+		],
+		"willRetry": false
+	},
+	{
+		"type": "agent_settled"
+	}
+]

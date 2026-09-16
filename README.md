@@ -5,8 +5,9 @@
 and a JSONL RPC mode. piui wraps the SDK in an HTTP/SSE server plus a browser client, so you can
 run chats and full agentic tasks from a browser instead of a terminal.
 
-> **Status: M0 complete (skeleton + test harness).** The app boots, migrates its database,
-> serves the SPA shell and ships in a container; chat and agent modes arrive in M2/M5. The
+> **Status: M2 complete (credentials + chat mode).** You can add a provider API key from
+> Settings → Providers, start a chat, watch tokens stream, steer/queue/stop a run, and survive a
+> reload and a server restart. Web search lands in M3, agent mode in M5. The
 > sections below marked *(M7)* are placeholders for the product documentation that the spec
 > requires to exist by then; do not delete the headings, fill them in.
 

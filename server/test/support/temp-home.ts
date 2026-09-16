@@ -3,6 +3,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Logger } from "pino";
 import { parseConfig } from "../../src/config.js";
 import { type AppContext, createContext, disposeContext } from "../../src/context.js";
 import type { AuthProvider } from "../../src/http/auth.js";
@@ -27,6 +28,8 @@ export interface TempHomeOptions {
 	ids?: SeqIdGen;
 	/** Swapping the auth provider must touch nothing but this wiring (spec/06-auth.md §8.6). */
 	authProvider?: AuthProvider;
+	/** A recording logger, for the secret-hygiene tests (spec/14-credentials.md §9.10). */
+	logger?: Logger;
 }
 
 export function createTempHome(options: TempHomeOptions = {}): TempHome {
@@ -49,7 +52,7 @@ export function createTempHome(options: TempHomeOptions = {}): TempHome {
 		config,
 		clock,
 		ids,
-		logger: silentLogger(),
+		logger: options.logger ?? silentLogger(),
 		...(options.authProvider ? { authProvider: options.authProvider } : {}),
 		sleep: async (ms: number) => {
 			sleeps.push(ms);

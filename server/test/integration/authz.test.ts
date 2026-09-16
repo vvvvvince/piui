@@ -96,9 +96,9 @@ describe("step-up re-authentication", () => {
 			expect(up.statusCode).toBe(204);
 			expect(ctx.repos.authSessions.get(admin.sessionId)?.step_up_at).toBe(clock.nowIso());
 
-			// within the window the guard is transparent (the route itself arrives in M2)
+			// within the window the guard is transparent and the real route answers
 			const passed = await app.inject({ method: "POST", url: START, headers, payload: {} });
-			expect(passed.statusCode).toBe(404);
+			expect(passed.statusCode).toBe(200);
 
 			clock.advance(11 * 60_000);
 			const expired = await app.inject({ method: "POST", url: START, headers, payload: {} });
@@ -114,7 +114,7 @@ describe("step-up re-authentication", () => {
 				url: "/api/providers",
 				headers: mint().headers,
 			});
-			expect(res.statusCode).toBe(404);
+			expect(res.statusCode).toBe(200);
 		});
 	});
 
@@ -149,7 +149,7 @@ describe("step-up re-authentication", () => {
 				headers: { cookie, "x-requested-with": "piui", "content-type": "application/json" },
 				payload: {},
 			});
-			expect(res.statusCode).toBe(404);
+			expect(res.statusCode).toBe(200);
 		});
 	});
 

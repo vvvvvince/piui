@@ -37,14 +37,22 @@ async function main(): Promise<void> {
 	);
 	sweep.unref();
 
+	// Idle live sessions are dropped after 15 minutes (spec/01-architecture.md §4.5).
+	const evict = setInterval(() => {
+		const evicted = app.piui.hub.evictIdle();
+		if (evicted.length > 0) ctx.logger.debug({ evicted }, "idle sessions evicted");
+	}, 60 * 1000);
+	evict.unref();
+
 	let shuttingDown = false;
 	const shutdown = async (signal: string): Promise<void> => {
 		if (shuttingDown) return;
 		shuttingDown = true;
 		ctx.logger.info({ signal }, "shutting down");
 		clearInterval(sweep);
+		clearInterval(evict);
 		try {
-			// M2+: abort streaming runs and dispose live sessions here.
+			// `app.close()` runs the onClose hook: abort streaming runs, dispose live sessions.
 			await app.close();
 			disposeContext(ctx);
 			process.exit(0);

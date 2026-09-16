@@ -1,0 +1,366 @@
+// SessionHub — one LiveSession per conversation, the SSE ring buffer, the run semaphore and
+// idle eviction. spec/01-architecture.md §§4.4-4.5, spec/09-api.md §9.
+import type { ConversationRuntimeState, UiEvent, UiMessage } from "@piui/shared";
+import { ApiError } from "../http/errors.js";
+import type { GlobalEventBus } from "./bus.js";
+import { EventProjector, type ProjectedEvent } from "./event-map.js";
+import { MessageIds, projectTranscript } from "./transcript.js";
+
+export const RING_MAX_EVENTS = 2000;
+export const RING_MAX_BYTES = 8 * 1024 * 1024;
+export const EVICT_AFTER_MS = 15 * 60 * 1000;
+const DELTA_TICK_MS = 50;
+
+/** The slice of pi's AgentSession the hub needs; keeps the hub out of the pi boundary. */
+export interface HubSession {
+	readonly isStreaming: boolean;
+	readonly isIdle: boolean;
+	readonly isCompacting: boolean;
+	readonly messages: readonly unknown[];
+	readonly systemPrompt: string;
+	readonly sessionFile: string | undefined;
+	subscribe(listener: (event: { type: string; [key: string]: unknown }) => void): () => void;
+	prompt(text: string, options?: { streamingBehavior?: "steer" | "followUp" }): Promise<void>;
+	abort(): Promise<void>;
+	clearQueue(): { steering: string[]; followUp: string[] };
+	// pi 0.85.1 exposes the queue as two getters, not the `getPendingMessages()` of spike S7.
+	getSteeringMessages(): readonly string[];
+	getFollowUpMessages(): readonly string[];
+	waitForIdle(): Promise<void>;
+	getSessionStats(): {
+		tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
+		cost: number;
+		contextUsage?: { tokens: number; contextWindow: number; percent: number };
+		userMessages: number;
+		assistantMessages: number;
+		toolCalls: number;
+	};
+	dispose(): void;
+}
+
+export interface SessionHandle {
+	session: HubSession;
+	dispose(): void;
+}
+
+export type SessionFactory = (conversationId: string) => Promise<SessionHandle>;
+
+export interface HubDeps {
+	createSession: SessionFactory;
+	events: GlobalEventBus;
+	/** Domain clock (fake in tests) — drives eviction. */
+	nowMs(): number;
+	maxConcurrentRuns: number;
+	onRunEnd?(conversationId: string, session: HubSession): void;
+}
+
+export class LiveSession {
+	readonly ids = new MessageIds();
+	readonly projector: EventProjector;
+	private readonly ring: UiEvent[] = [];
+	private ringBytes = 0;
+	private readonly subscribers = new Set<(event: UiEvent) => void>();
+	private readonly unsubscribe: () => void;
+	private flushTimer: NodeJS.Timeout | undefined;
+	seq = 0;
+	lastActivityMs: number;
+
+	constructor(
+		readonly conversationId: string,
+		readonly handle: SessionHandle,
+		private readonly deps: HubDeps,
+	) {
+		this.projector = new EventProjector({ ids: this.ids });
+		this.lastActivityMs = deps.nowMs();
+		this.unsubscribe = handle.session.subscribe((event) => this.ingest(event));
+	}
+
+	get session(): HubSession {
+		return this.handle.session;
+	}
+
+	get subscriberCount(): number {
+		return this.subscribers.size;
+	}
+
+	get state(): ConversationRuntimeState {
+		const stats = safeStats(this.session);
+		return {
+			isStreaming: this.session.isStreaming,
+			isCompacting: this.session.isCompacting,
+			isRetrying: false,
+			queued: {
+				steering: this.session.getSteeringMessages().length,
+				followUp: this.session.getFollowUpMessages().length,
+			},
+			contextPercent: contextPercentOf(stats),
+		};
+	}
+
+	messages(): UiMessage[] {
+		const messages = projectTranscript(this.session.messages, this.ids);
+		const partial = this.projector.partial;
+		if (partial && !messages.some((m) => m.id === partial.id)) messages.push(partial);
+		return messages;
+	}
+
+	snapshot(): UiEvent {
+		return { type: "snapshot", seq: this.seq, messages: this.messages(), state: this.state };
+	}
+
+	/** Frames after `since`, or undefined when the ring no longer covers it. */
+	replay(since: number): UiEvent[] | undefined {
+		if (since === this.seq) return [];
+		// A `since` from the future belongs to a previous server process: send a snapshot.
+		if (since > this.seq) return undefined;
+		const first = this.ring[0];
+		if (!first || since < first.seq - 1) return undefined;
+		return this.ring.filter((event) => event.seq > since);
+	}
+
+	subscribe(listener: (event: UiEvent) => void): () => void {
+		this.subscribers.add(listener);
+		this.lastActivityMs = this.deps.nowMs();
+		return () => {
+			this.subscribers.delete(listener);
+			this.lastActivityMs = this.deps.nowMs();
+		};
+	}
+
+	emit(projected: ProjectedEvent): UiEvent {
+		this.seq += 1;
+		const event = { ...projected, seq: this.seq } as UiEvent;
+		this.ring.push(event);
+		this.ringBytes += JSON.stringify(event).length;
+		while (this.ring.length > RING_MAX_EVENTS || this.ringBytes > RING_MAX_BYTES) {
+			const dropped = this.ring.shift();
+			if (!dropped) break;
+			this.ringBytes -= JSON.stringify(dropped).length;
+		}
+		for (const subscriber of [...this.subscribers]) subscriber(event);
+		return event;
+	}
+
+	private ingest(event: { type: string; [key: string]: unknown }): void {
+		this.lastActivityMs = this.deps.nowMs();
+		for (const projected of this.projector.ingest(event)) this.emit(projected);
+
+		switch (event.type) {
+			case "agent_start":
+			case "turn_start":
+				this.startFlushTimer();
+				this.emit({ type: "state", state: this.state });
+				this.deps.events.emit({
+					type: "conversation_state",
+					conversationId: this.conversationId,
+					isStreaming: true,
+				});
+				break;
+			case "agent_end": {
+				this.emitUsage();
+				break;
+			}
+			case "agent_settled": {
+				this.stopFlushTimer();
+				for (const projected of this.projector.flush()) this.emit(projected);
+				this.emitUsage();
+				this.emit({ type: "state", state: this.state });
+				this.emit({ type: "done", reason: lastRunReason(this.session) });
+				this.deps.events.emit({
+					type: "conversation_state",
+					conversationId: this.conversationId,
+					isStreaming: false,
+				});
+				this.deps.events.emit({ type: "conversation_done", conversationId: this.conversationId });
+				this.deps.onRunEnd?.(this.conversationId, this.session);
+				break;
+			}
+			case "queue_update":
+				this.emit({ type: "state", state: this.state });
+				break;
+			default:
+				break;
+		}
+	}
+
+	private emitUsage(): void {
+		const stats = safeStats(this.session);
+		if (!stats) return;
+		this.emit({
+			type: "usage",
+			tokensTotal: stats.tokens.total,
+			costTotal: stats.cost,
+			contextPercent: contextPercentOf(stats),
+		});
+	}
+
+	private startFlushTimer(): void {
+		if (this.flushTimer) return;
+		this.flushTimer = setInterval(() => {
+			for (const projected of this.projector.flush()) this.emit(projected);
+		}, DELTA_TICK_MS);
+		this.flushTimer.unref?.();
+	}
+
+	private stopFlushTimer(): void {
+		if (!this.flushTimer) return;
+		clearInterval(this.flushTimer);
+		this.flushTimer = undefined;
+	}
+
+	dispose(): void {
+		this.stopFlushTimer();
+		this.unsubscribe();
+		this.handle.dispose();
+		this.subscribers.clear();
+	}
+}
+
+export class SessionHub {
+	private readonly sessions = new Map<string, LiveSession>();
+	private readonly loading = new Map<string, Promise<LiveSession>>();
+	private running = 0;
+
+	constructor(private readonly deps: HubDeps) {}
+
+	get liveCount(): number {
+		return this.sessions.size;
+	}
+
+	peek(conversationId: string): LiveSession | undefined {
+		return this.sessions.get(conversationId);
+	}
+
+	/** Lazily created on first prompt or first SSE attach (spec §4.5). */
+	async ensure(conversationId: string): Promise<LiveSession> {
+		const existing = this.sessions.get(conversationId);
+		if (existing) return existing;
+		const loading = this.loading.get(conversationId);
+		if (loading) return loading;
+
+		const promise = (async () => {
+			const handle = await this.deps.createSession(conversationId);
+			const live = new LiveSession(conversationId, handle, this.deps);
+			this.sessions.set(conversationId, live);
+			this.loading.delete(conversationId);
+			return live;
+		})();
+		this.loading.set(conversationId, promise);
+		try {
+			return await promise;
+		} catch (error) {
+			this.loading.delete(conversationId);
+			throw error;
+		}
+	}
+
+	/** One run per conversation plus the global cap (spec/01-architecture.md §5). */
+	async prompt(
+		conversationId: string,
+		text: string,
+		streamingBehavior?: "steer" | "followUp",
+	): Promise<"steer" | "followUp" | null> {
+		const live = await this.ensure(conversationId);
+		if (live.session.isStreaming) {
+			if (!streamingBehavior) {
+				throw new ApiError(
+					"conversation_busy",
+					"This conversation is still streaming; steer it or queue a follow-up.",
+				);
+			}
+			await live.session.prompt(text, { streamingBehavior });
+			return streamingBehavior;
+		}
+		if (this.running >= this.deps.maxConcurrentRuns) {
+			throw new ApiError("too_many_runs", "Too many conversations are running at once.");
+		}
+		this.running += 1;
+		// The route must not await the run: prompt() resolves when the run settles.
+		void live.session
+			.prompt(text)
+			.catch(() => {
+				/* errors reach the client as events */
+			})
+			.finally(() => {
+				this.running = Math.max(0, this.running - 1);
+			});
+		return null;
+	}
+
+	async abort(conversationId: string): Promise<{ steering: string[]; followUp: string[] }> {
+		const live = this.sessions.get(conversationId);
+		if (!live) return { steering: [], followUp: [] };
+		// Clear the queue first so the client can restore the text, then abort, then wait idle.
+		const restored = live.session.clearQueue();
+		await live.session.abort();
+		await Promise.race([
+			live.session.waitForIdle(),
+			new Promise<void>((resolve) => {
+				const timer = setTimeout(resolve, 5000);
+				timer.unref?.();
+			}),
+		]);
+		return restored;
+	}
+
+	/** Drops sessions with no subscriber that have been idle for 15 minutes. */
+	evictIdle(): string[] {
+		const evicted: string[] = [];
+		for (const [id, live] of this.sessions) {
+			if (live.subscriberCount > 0 || live.session.isStreaming) continue;
+			if (this.deps.nowMs() - live.lastActivityMs < EVICT_AFTER_MS) continue;
+			live.dispose();
+			this.sessions.delete(id);
+			evicted.push(id);
+		}
+		return evicted;
+	}
+
+	drop(conversationId: string): void {
+		const live = this.sessions.get(conversationId);
+		if (!live) return;
+		live.dispose();
+		this.sessions.delete(conversationId);
+	}
+
+	async disposeAll(): Promise<void> {
+		for (const live of this.sessions.values()) {
+			try {
+				await live.session.abort();
+			} catch {
+				/* best effort */
+			}
+			live.dispose();
+		}
+		this.sessions.clear();
+	}
+}
+
+function safeStats(session: HubSession): ReturnType<HubSession["getSessionStats"]> | undefined {
+	try {
+		return session.getSessionStats();
+	} catch {
+		return undefined;
+	}
+}
+
+function contextPercentOf(
+	stats: ReturnType<HubSession["getSessionStats"]> | undefined,
+): number | null {
+	// pi reports a fraction (0.03 = 3 %) — spike plan/spikes/05.
+	const percent = stats?.contextUsage?.percent;
+	if (typeof percent !== "number") return null;
+	return Math.min(100, Math.max(0, Math.round(percent * 1000) / 10));
+}
+
+function lastRunReason(session: HubSession): "settled" | "aborted" | "error" {
+	const messages = session.messages as { role?: string; stopReason?: string }[];
+	for (let i = messages.length - 1; i >= 0; i -= 1) {
+		const message = messages[i];
+		if (message?.role !== "assistant") continue;
+		if (message.stopReason === "aborted") return "aborted";
+		if (message.stopReason === "error") return "error";
+		return "settled";
+	}
+	return "settled";
+}

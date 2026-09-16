@@ -6,12 +6,24 @@ import type { HealthResponse, MetaResponse } from "@piui/shared";
 import Fastify from "fastify";
 import type { AppContext } from "../context.js";
 import { ForbiddenError, NotFoundError } from "../db/repositories/base.js";
+import { createServices, type Services } from "../services.js";
 import { LoginRateLimiter, registerAuth } from "./auth.js";
 import { ApiError } from "./errors.js";
+import { registerConversationRoutes } from "./routes/conversations.js";
+import { registerGlobalEventRoutes } from "./routes/events.js";
+import { registerModelRoutes } from "./routes/models.js";
+import { registerProviderRoutes } from "./routes/providers.js";
+
+declare module "fastify" {
+	interface FastifyInstance {
+		/** Process-wide services (pi runtime, credentials, models, hub). */
+		piui: Services;
+	}
+}
 
 export type PiuiServer = Awaited<ReturnType<typeof buildServer>>;
 
-export async function buildServer(ctx: AppContext) {
+export async function buildServer(ctx: AppContext, injected?: Services) {
 	const { config } = ctx;
 	const app = Fastify({
 		loggerInstance: ctx.logger,
@@ -123,6 +135,17 @@ export async function buildServer(ctx: AppContext) {
 			platform: process.platform,
 		};
 	});
+
+	const services = injected ?? (await createServices(ctx));
+	app.decorate("piui", services);
+	app.addHook("onClose", async () => {
+		await services.dispose();
+	});
+
+	await registerProviderRoutes(app, ctx, services);
+	await registerModelRoutes(app, services);
+	await registerGlobalEventRoutes(app, services);
+	await registerConversationRoutes(app, services.conversations, services.hub);
 
 	if (ctx.serveClient && existsSync(join(config.clientDist, "index.html"))) {
 		await app.register(fastifyStatic, { root: config.clientDist, prefix: "/" });

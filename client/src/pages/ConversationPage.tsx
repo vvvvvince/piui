@@ -42,6 +42,18 @@ export function ConversationPage(): JSX.Element {
 		void queryClient.invalidateQueries({ queryKey: ["conversations"] });
 	}, [stream.doneCount, id, queryClient]);
 
+	// spec/10-frontend.md §2 — the ContextMeter offers "Compact now" above 70 %.
+	const compact = useMutation({
+		mutationFn: () => api.compactConversation(id!),
+		onSuccess: (result) => {
+			setNotice(
+				`Context compacted: ${result.tokensBefore} → ~${result.estimatedTokensAfter} tokens.`,
+			);
+			void queryClient.invalidateQueries({ queryKey: ["conversation", id] });
+		},
+		onError: (error: Error) => setNotice(`Not compacted: ${error.message}`),
+	});
+
 	const send = useMutation({
 		mutationFn: (input: {
 			text: string;
@@ -155,6 +167,31 @@ export function ConversationPage(): JSX.Element {
 							ctx {stream.state.contextPercent}%
 						</span>
 					)}
+					{(stream.state.contextPercent ?? detail.data?.state.contextPercent ?? 0) > 70 && (
+						<button
+							type="button"
+							data-testid="compact-now"
+							className="rounded border border-amber-700 px-2 py-0.5 text-amber-200"
+							disabled={compact.isPending}
+							onClick={() => compact.mutate()}
+						>
+							{compact.isPending ? "Compacting…" : "Compact now"}
+						</button>
+					)}
+					{/* spec/09-api.md §8 — export; plain links so the browser downloads the file. */}
+					<span data-testid="export-menu" className="flex items-center gap-1">
+						<span className="text-slate-500">export</span>
+						{(["md", "json", "html"] as const).map((format) => (
+							<a
+								key={format}
+								data-testid={`export-${format}`}
+								className="underline"
+								href={`/api/conversations/${id}/export?format=${format}`}
+							>
+								{format}
+							</a>
+						))}
+					</span>
 					{/* spec/16-extensions.md §5 — `setStatus`, keyed, in the header. */}
 					{stream.statuses.map((status) => (
 						<span
@@ -194,7 +231,19 @@ export function ConversationPage(): JSX.Element {
 
 			<div className="flex min-h-0 flex-1">
 				<div className="flex min-w-0 flex-1 flex-col">
-					<MessageList messages={stream.messages} />
+					<MessageList
+						messages={stream.messages}
+						onRetry={() => {
+							// spec/10-frontend.md §4.5 — Retry re-sends the last user message.
+							const lastUser = [...stream.messages]
+								.reverse()
+								.find((message) => message.role === "user");
+							const text = lastUser?.blocks
+								.map((block) => (block.type === "text" ? block.text : ""))
+								.join("");
+							if (text) send.mutate({ text });
+						}}
+					/>
 				</div>
 				{detail.data?.mode === "agent" && (
 					<AgentSidePanel

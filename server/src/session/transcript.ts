@@ -208,6 +208,26 @@ export function projectTranscript(messages: readonly unknown[], ids: MessageIds)
 			});
 			continue;
 		}
+		// pi replaces the whole history with this one message plus the kept tail after a
+		// compaction (spike plan/spikes/13 §2 fact 5). Without it the transcript would look
+		// silently truncated.
+		if (message.role === "compactionSummary") {
+			out.push({
+				id,
+				role: "system",
+				blocks: [
+					{
+						type: "text",
+						id: `${id}:0`,
+						text: `Context compacted. Summary of the earlier conversation:\n\n${String(
+							message.summary ?? "",
+						)}`,
+					},
+				],
+				createdAt,
+			});
+			continue;
+		}
 		if (message.role !== "assistant") {
 			// `bash` and custom messages: the type exists, V1 skips them (spec §4).
 			continue;

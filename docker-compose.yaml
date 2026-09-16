@@ -36,8 +36,8 @@ services:
     environment:
       SEARXNG_BASE_URL: http://searxng:8080/
     volumes:
-      - searxng:/etc/searxng
+      # JSON output is off in the stock image (it answers 403 to piui); this file turns it on.
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
 
 volumes:
   piui-data:
-  searxng:

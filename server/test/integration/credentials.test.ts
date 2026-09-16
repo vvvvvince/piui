@@ -371,6 +371,46 @@ describe("providers & credentials", () => {
 		);
 	});
 
+	it("[19-deployment#9.4] in a container, credential writes need PIUI_INSECURE_TRANSPORT_OK", async () => {
+		// The shipped compose file sets it because it publishes to loopback only; unsetting it
+		// must bring the refusal back (spec/19-deployment.md §5.2).
+		await withTestApp(
+			async (t) => {
+				const admin = await adminWithStepUp(t);
+				const refused = await t.app.inject({
+					method: "POST",
+					url: "/api/providers/anthropic/auth/start",
+					headers: { ...admin.headers, ...json },
+					payload: { apiKey: FIXTURE_KEY },
+				});
+				expect(refused.statusCode).toBe(403);
+				expect(refused.json<{ error: { code: string } }>().error.code).toBe("insecure_transport");
+			},
+			// exactly the shipped compose env, minus the acknowledgement
+			{ env: { PIUI_CONTAINER: "1", PIUI_ALLOW_REMOTE: "1", PIUI_HOST: "0.0.0.0" } },
+		);
+		await withTestApp(
+			async (t) => {
+				const admin = await adminWithStepUp(t);
+				const accepted = await t.app.inject({
+					method: "POST",
+					url: "/api/providers/anthropic/auth/start",
+					headers: { ...admin.headers, ...json },
+					payload: { apiKey: FIXTURE_KEY },
+				});
+				expect(accepted.statusCode).toBe(200);
+			},
+			{
+				env: {
+					PIUI_CONTAINER: "1",
+					PIUI_ALLOW_REMOTE: "1",
+					PIUI_HOST: "0.0.0.0",
+					PIUI_INSECURE_TRANSPORT_OK: "1",
+				},
+			},
+		);
+	});
+
 	it("[14-credentials#9.9] refuses key entry over plaintext when piui is reachable remotely", async () => {
 		await withTestApp(
 			async (t) => {

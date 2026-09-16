@@ -5,3 +5,64 @@
 :root {
 	color-scheme: dark;
 }
+
+/*
+ * spec/10-frontend.md §5 — light mode. piui's components name slate shades directly
+ * (`bg-slate-950`, `text-slate-300`, …), so the light theme remaps that small palette under
+ * `html.light` instead of adding a `dark:` variant to several hundred class attributes.
+ * Ceiling: a component that reaches for a shade outside this list stays dark; add the shade
+ * here (one line) rather than rewriting the component.
+ */
+html.light body {
+	background-color: #f8fafc;
+	color: #0f172a;
+}
+html.light .bg-slate-950 {
+	background-color: #f8fafc;
+}
+html.light .bg-slate-900 {
+	background-color: #eef2f7;
+}
+html.light .bg-slate-900\/60,
+html.light .bg-slate-800\/60 {
+	background-color: #e5eaf1;
+}
+html.light .bg-slate-800 {
+	background-color: #dde3ea;
+}
+html.light .text-slate-100,
+html.light .text-slate-200,
+/* the active nav item is `text-white` on a now-light background */
+html.light .text-white {
+	color: #0f172a;
+}
+html.light .text-slate-300 {
+	color: #1e293b;
+}
+html.light .text-slate-400 {
+	color: #475569;
+}
+html.light .text-slate-500 {
+	color: #64748b;
+}
+html.light .border-slate-800,
+html.light .border-slate-700 {
+	border-color: #cbd5e1;
+}
+
+/* spec/10-frontend.md §5 — reduced motion is respected everywhere, not per component. */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
+/* Visible focus ring on every interactive element (spec §5, a11y). */
+:focus-visible {
+	outline: 2px solid #38bdf8;
+	outline-offset: 2px;
+}

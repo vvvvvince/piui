@@ -4,6 +4,7 @@ import type { ExtensionSummary, FetchExtensionResponse } from "@piui/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { type ApiClientError, api } from "../api/client.js";
+import { CodeEditor } from "../components/CodeEditor.js";
 
 function Chips({ label, items }: { label: string; items: string[] }): JSX.Element | null {
 	if (items.length === 0) return null;
@@ -217,14 +218,15 @@ export function ExtensionsPage(): JSX.Element {
 						placeholder="my-extension"
 						className="w-64 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
 					/>
-					<textarea
-						aria-label="Extension source"
-						data-testid="extension-paste-source"
+					{/* M7's UX pass: CodeMirror for extension source (M6 parked it here). */}
+					<CodeEditor
+						ariaLabel="Extension source"
+						testId="extension-paste-source"
+						language="javascript"
+						height="160px"
 						value={pasteSource}
-						disabled={!installEnabled}
-						onChange={(event) => setPasteSource(event.target.value)}
-						placeholder="export default function (pi) { … }"
-						className="h-40 w-full rounded border border-slate-700 bg-slate-950 p-2 font-mono text-xs"
+						readOnly={!installEnabled}
+						onChange={setPasteSource}
 					/>
 					<button
 						type="button"
@@ -272,12 +274,14 @@ export function ExtensionsPage(): JSX.Element {
 							{review.bytes} bytes · sha256{" "}
 							<code className="font-mono">{review.sha256.slice(0, 16)}…</code>
 						</p>
-						<textarea
+						<CodeEditor
 							readOnly
-							aria-label="Fetched source"
-							data-testid="extension-review-source"
+							ariaLabel="Fetched source"
+							testId="extension-review-source"
+							language="javascript"
+							height="224px"
 							value={review.source}
-							className="h-56 w-full rounded border border-slate-700 bg-slate-950 p-2 font-mono text-xs"
+							onChange={() => {}}
 						/>
 						<label className="flex items-center gap-2 text-xs">
 							<input

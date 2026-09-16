@@ -1162,3 +1162,200 @@ and `repository scoping > keeps workspaces scoped the same way` failed by name (
   a spec erratum in M7.
 - The ephemeral test run is visible on the global SSE channel; if M7's sidebar badges count
   conversations from that channel, they must filter `ephemeral`.
+
+---
+
+## M7 — Hardening, polish, docs ✅
+
+**Shipped**
+
+- *Spike S14* (`plan/spikes/13-export-and-compaction.md`) before any code, and it changed the
+  design twice. pi **does** ship an HTML exporter (`dist/core/export-html/`:
+  `exportSessionToHtml`, `exportFromFile`, a template and an ANSI converter) but its `exports`
+  map has four subpaths and none of them reaches it — a deep import dies with
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`, and the only public serializer, `serializeConversation`, is
+  plain text (`[User]: …`). So `09-api.md` §8's "delegate to pi's HTML export" is not
+  implementable in 0.85.1 and **piui renders all three formats itself**. Compaction, by
+  contrast, is a real entry point: `session.compact(customInstructions?)` aborts the current
+  run, spends one model call, emits `compaction_start` / `compaction_end` (`reason:
+  "manual" | "threshold" | "overflow"`), throws plain `Error`s for *"Nothing to compact (session
+  too small)"* / *"Already compacted"*, and **replaces** `session.messages` with a
+  `{ role: "compactionSummary", summary, tokensBefore }` message plus the kept tail.
+- `server/src/http/security.ts` + an `onRequest` hook: `nosniff`, `no-referrer`,
+  `X-Frame-Options: DENY`, `Permissions-Policy`, and the CSP — production exactly as
+  `11-security.md` §4 (including `img-src https:` for M3's Sources-footer favicons), development
+  widening only `script-src` (`'unsafe-inline' 'unsafe-eval'`) and `connect-src`
+  (`ws:`, the two Vite origins) so HMR works. `openSse` copies the reply's headers into its
+  hijacked `writeHead`, so the SSE streams carry them too; uploads keep their dedicated
+  `Content-Security-Policy: sandbox` (spec §10) instead of folding into the global policy.
+- Error discipline (§8): fastify's `FST_ERR_CTP_*` transport refusals are mapped into the
+  envelope (M5c's `DELETE` + `content-type: application/json` + empty body now answers
+  `400 validation_error` with *"The request body is empty…"*), and `internal_error` carries a
+  `correlationId` (the request id) with the stack in the server log only.
+- `server/src/audit.ts` — `$PIUI_HOME/logs/audit.jsonl`, append-only, `0600`. One `onResponse`
+  hook turns every mutating `/api/*` request into `{ ts, actor, action, target, outcome,
+  status }` through one route→action rule (`POST /api/profiles` → `profile.create`,
+  `POST /api/auth/login` → `auth.login`, `POST /api/conversations/:id/compact` →
+  `conversation.compact`), so a route added later is audited by construction. Dangerous tool
+  invocations get their own line from the hub (`tool.invoke` + conversation id + a 160-char
+  argument summary). Everything written goes through the shared scrubber, which M2's
+  `sanitizeMessage` now *is* (`server/src/util/redact.ts`).
+- Caps: SSE subscribers (8 per conversation → `429 rate_limited`, 32 per process on
+  `/api/events`), and the route limits of §4 (`POST /messages` 60/min, `/api/fs/browse`
+  120/min, per session) as one `RouteRateLimiter` table checked in the auth `onRequest` hook.
+- Global channel completed: the hub already emitted `conversation_state` /
+  `conversation_done`; M7 adds the client half — `useGlobalEvents`, **one shared EventSource per
+  tab** (M3 flagged the 6-connection budget), used by the new `Sidebar` (recent conversations,
+  a running badge, in-place rename from `conversation_title`), by `ProvidersPage` and by
+  `WorkspaceFiles`, which all opened their own stream before.
+- Export (`server/src/conversations/export.ts`) and compaction: `GET …/export?format=md|json|html`
+  with `Content-Disposition: attachment`, and `POST …/compact` → `{ summary, tokensBefore,
+  estimatedTokensAfter, cost }`, plus the "Compact now" button the `ContextMeter` shows above
+  70 %. `projectTranscript` learned pi's `compactionSummary` role, so the divider is in the
+  transcript, the snapshot, the export and the reload.
+- UX states (`10-frontend.md` §4): the no-credentials setup card on `/conversations`, the
+  "working…" indicator while a tool runs, error bubbles with **Retry** + **copy details**, the
+  designed **not-found** page, plus `CommandPalette` (`Cmd/Ctrl+K`), `ThemeToggle`
+  (system/dark/light, persisted under `piui.v1.theme`), a skip link, a global focus ring and a
+  `prefers-reduced-motion` rule.
+- Docs: README rewritten (status, the full env table, operating notes, the trust-model section
+  kept verbatim in substance), `docs/deployment.md` (Docker, upgrade, backup, reset, derived
+  images, resource limits, audit log, bare metal, troubleshooting) and
+  `docs/adding-a-provider.md` (credentials, extension-registered providers, local
+  OpenAI-compatible servers, what piui deliberately does not do).
+- Deployment: `searxng/settings.yml` is now shipped and mounted read-only (see the deviation),
+  `.github/workflows/ci.yml` runs lint → typecheck → the suite → a multi-arch buildx image, and
+  Settings → About renders `container` / `insecureTransportOk` / search provider / workspace
+  roots / run limits from `/api/health` + `/api/meta`, with a loud default-credentials warning.
+
+**Verified by hand (Firefox via MCP, production build on :8799, then the container on :8787)**
+
+1. **Production CSP, in a real browser**: SPA, API, SSE and uploads all carry the strict policy
+   (`script-src 'self'`, no `unsafe-*`), the app renders, streams and navigates. CodeMirror in
+   the skill editor renders *with* syntax highlighting under it — the one component that would
+   have broken on a too-tight `style-src`. ✅
+2. Chat end to end: prompt → tokens → transcript, `ctx %` in the header, export links; the
+   **auto-compaction** divider ("Context compacted. Summary of the earlier conversation: …")
+   appears in the transcript, survives a reload and is in the export. ✅
+3. **Compact now** above 70 % (the header turned red at `ctx 100%`): pressed it on an
+   already-compacted session → *"Not compacted: Nothing to compact (session too small)"* next to
+   the button **and** the two SSE notices (*Compacting the context…*, *Compaction failed: …*) as
+   transcript dividers. The success path is the auto-compaction above plus the integration test. ✅
+4. Export in all three formats (`curl` for the headers, then the HTML opened in the browser):
+   `text/markdown` / `application/json` / `text/html`, each with
+   `Content-Disposition: attachment; filename="m7-browser-check-a0bdfb83.…"`, and the HTML is a
+   self-contained, escaped document that renders standalone. ✅
+5. **Disconnected/reconnecting**: killed the server with a conversation open → amber
+   *Reconnecting…* bar, transcript **not** cleared; restarted it → the page recovered on its own. ✅
+6. Sidebar: the recent list renders, and `conversation_title` renamed the row **in place** from
+   the global channel with no refetch. ✅
+7. Light theme: toggled to light, every page readable (one contrast nit found and fixed: the
+   active nav item was `text-white` on a light background). ✅
+8. Container (`docker compose up -d`, image built from the repo):
+   healthy, `/api/health` → `container: true, insecureTransportOk: true`; API key added through
+   the API → `/data/auth.json` mode `0600` and 14 available models (§9.3); unsetting
+   `PIUI_INSECURE_TRANSPORT_OK` → `403 insecure_transport` (§9.4); an **agent run wrote
+   `workspaces/from-the-agent.txt`, owned by uid 10001 on the host**, while `/etc` and `/tmp`
+   were refused (`path_denylisted`, `path_not_allowed`) (§9.5); `restart` preserved
+   conversations and credentials, `down -v` cleared them and left `./workspaces` intact (§9.6);
+   `docker compose stop` logged `{"signal":"SIGTERM","msg":"shutting down"}` inside the grace
+   period, proving the `tini` wiring (§9.7); `--profile search up -d` + the two documented env
+   vars returned **real SearXNG results** through `POST /api/tools/web_search/test` (§9.10); the
+   documented three-line derived image built and ran `python3` (§9.11). ✅
+9. Suite: 458 tests green, offline, ~11 s; lint + strict typecheck clean; production build
+   serves SPA, export, compact, uploads and an agent run on one port.
+
+**Deviations / decisions** (the seven open items, in order)
+
+1. *Export renders in piui — all three formats.* Not a choice so much as S14's verdict: pi's
+   exporter is behind its `exports` map. Rendering from `UiMessage[]` also means the export
+   contains exactly what the transcript shows — tool cards as fenced `json` blocks with their
+   output, attachments as links, the `/command` echo as a quote line, per-message tokens/cost,
+   and the compaction divider. The HTML is deliberately asset-free and escaped (model output is
+   *never* rendered as HTML), so it opens from disk under any CSP.
+2. *`POST /:id/compact` is synchronous.* pi's `compact()` aborts the run first and resolves when
+   the summary is written, so there is nothing to poll and no run-like lifecycle worth
+   inventing. It answers `200 { summary, tokensBefore, estimatedTokensAfter, cost }` and
+   `409 conversation_busy` for pi's two refusals (*nothing to compact* / *already compacted*).
+   On the conversation channel it emits `state` + a `notice` for both pi events and a fresh
+   `snapshot` on success (pi replaced the transcript, so a delta would be a lie); on the global
+   channel nothing new — the conversation is not "streaming" and the sidebar has nothing to say.
+3. *The CSP* is one production string and one development string (above). Dev widens exactly
+   three directives, because the SPA is served by Vite there and a production CSP silently
+   blanks the page while the suite stays green. Uploads **keep** their separate
+   `Content-Security-Policy: sandbox`: the global policy governs piui's own documents, the
+   sandbox header is what makes a served PNG a non-origin document.
+4. *The audit log is an append-only JSONL file, not a table*: it must survive
+   `docker compose down -v`-style container replacement inside `/data/logs/`, it is written far
+   more often than read, and a file cannot be silently rewritten by the same repository layer it
+   is auditing. **Mutations only** (plus login/step-up outcomes and dangerous tool calls) —
+   auditing reads would bury the signal. No rotation in V1; `docs/deployment.md` says so and
+   points at `logrotate`. **Request bodies are never recorded**, which is what makes "no
+   credential can reach the log" a structural property rather than a scrubbing promise.
+5. *SSE caps are per conversation (8, as §5 says) and per process for the global channel (32).*
+   A refused stream is `429 rate_limited`; the client's `EventSource` retries with its existing
+   backoff and the UI shows the *Reconnecting…* state, so a refusal degrades into a designed
+   state instead of a blank page.
+6. *`ExtensionSourceEditor` and the AGENTS.md field got `CodeEditor`* (open item 6 — they were
+   re-parked here in M6): the paste-install box and the fetched-source review use it with
+   `language: "javascript"` (`@codemirror/lang-javascript` was already installed), AGENTS.md
+   uses the markdown mode.
+7. *The `09-api.md` §6 erratum is fixed in the spec*, not in the code: fastify binds one
+   content-type parser per path, so multipart zip import keeps its own route and the table now
+   lists `POST /api/skills/import-zip` with the reason inline.
+- **Browser-only bug (the M7 one): the spec's deep links were not routes.** `/skills/:id`,
+  `/skills/new`, `/profiles/:id` and `/profiles/new` are in `10-frontend.md` §1, but M6's pages
+  kept the open editor in component state, so opening a skill and reloading — or sharing the
+  URL — produced react-router's raw *"Unexpected Application Error! 404 Not Found"*. The
+  routes exist now, selection is seeded from (and mirrored into) the URL, and a catch-all
+  renders a designed **Page not found**. Covered by `Routes.test.tsx`.
+- **Container-only bug: the search provider's error body reached the client.** A stock SearXNG
+  answers `/search?format=json` with `403` and an HTML page, and piui echoed that page back as
+  `500 internal_error` — a plain §8 violation that no offline test had provoked. The upstream
+  body now goes to the server log only; the client gets
+  `502 provider_not_configured: "The searxng search provider rejected the request (HTTP 403).
+  Check its configuration."` Covered by `[11-security#8.3]`.
+- *`searxng/settings.yml` is shipped and mounted read-only* instead of a named volume, so
+  `--profile search up -d` works with no manual edit (that was the other half of the same
+  finding; §9.10 now passes end to end).
+- *`./workspaces` needs `chown 10001:10001` once* — a bind mount's ownership comes from the
+  host, and without it registering `/workspaces` fails with `path_not_writable`. It is one
+  host-side command, now in the README quickstart, `.env.example` and `docs/deployment.md`; it
+  is the only step between `cp .env.example .env` and a working agent run.
+- *`PIUI_FAKE_SCRIPT` accepts `{ turns, usage?, contextWindow? }`* as well as a bare array, and
+  a script item may set its own `chunk` size. Both exist so the context meter, auto-compaction
+  and "Compact now" are reachable by hand and in tests without a 30 000-delta stream.
+- *The light theme remaps a dozen slate utilities under `html.light`* rather than adding a
+  `dark:` variant to several hundred class attributes. Ceiling: a component reaching for a shade
+  outside that list stays dark — add the shade (one line) instead of rewriting the component.
+- *E2E/Playwright is not wired in CI.* `test:e2e` has no suite behind it in V1; the browser pass
+  is the per-milestone manual check recorded here, and the workflow says so in a comment rather
+  than pretending to run one.
+- *Automation note for the next milestone:* under the production CSP the browser bridge cannot
+  inject scripts, so `browser_execute_js` returns `null` — drive the UI with
+  `get_dom`/`click`/`type` instead, and remember that an occluded window paints stale
+  screenshots (read the DOM to assert, use screenshots to look).
+
+**Mutation spot-check (§9.6)** — three mutants, all caught by name:
+
+1. dropped ` https:` from `PRODUCTION_CSP`'s `img-src` (the Sources-footer favicons would stop
+   loading in production) ⇒ `[11-security#4.2] serves the spec's CSP in production, still
+   allowing https: favicons` failed (1 failed, 5 passed).
+2. made `auditAction` ignore `DELETE` ⇒ `[11-security#7.1] records actor, action, target and
+   outcome for every mutation` failed (1 failed, 3 passed).
+3. disabled the per-conversation subscriber cap in the SSE route ⇒
+   `[11-security#5.1] refuses the ninth SSE subscriber on one conversation with 429` failed
+   (1 failed, 3 passed). All reverted. ✅
+
+**Open after V1**
+
+- Conversation search/filtering, archive and the row actions of `10-frontend.md` §2
+  (rename/duplicate/delete from the list) are still missing; the sidebar shows the last eight.
+- `GET /api/models` still ships the whole catalogue (~1355 models); the picker renders a bounded
+  slice. A `?available=1` or cursor API is the fix if it ever hurts.
+- The audit log has no rotation and no reader UI; `/api/audit` is reserved (admin-only in
+  `authz.ts`) but unimplemented.
+- `[LATER]` per the spec and untouched: fork/tree, retry, `POST /api/maintenance/empty-trash`,
+  multi-user (V2), memory phases beyond 0.
+- The HTML export has no syntax highlighting and no images inlined (attachments are links back
+  to the server); a self-contained archive would need base64 embedding.

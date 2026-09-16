@@ -66,6 +66,14 @@ describe("deployment artifacts", () => {
 	// The end-to-end half of 19-deployment#9.10 (pull the image, search for real) is an M7
 	// container check; what is testable offline is that the wiring matches the docs and the
 	// URL the searxng provider actually calls.
+	it("[19-deployment#9.10] ships the SearXNG settings that make its JSON API answer piui", () => {
+		// Found in the container: the stock image answers `/search?format=json` with 403 and an
+		// HTML error page unless `search.formats` includes json.
+		const settings = read("searxng/settings.yml");
+		expect(settings).toMatch(/formats:\n\s+- html\n\s+- json/);
+		expect(compose).toContain("./searxng/settings.yml:/etc/searxng/settings.yml:ro");
+	});
+
 	it("wires the bundled SearXNG to the two documented env vars", () => {
 		expect(compose).toMatch(/searxng:\n(?:.*\n)*?\s+profiles: \["search"\]/);
 		expect(compose).toContain(`PIUI_SEARXNG_URL: $\{PIUI_SEARXNG_URL:-}`.replace("\\", ""));

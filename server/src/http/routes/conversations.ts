@@ -2,6 +2,7 @@
 import type {
 	AbortResponse,
 	CommandsResponse,
+	CompactResponse,
 	ConversationDetail,
 	ConversationStatsResponse,
 	CreateConversationRequest,
@@ -14,10 +15,18 @@ import type {
 	UiResponseRequest,
 } from "@piui/shared";
 import type { CommandService } from "../../commands/service.js";
+import {
+	EXPORT_FORMATS,
+	type ExportFormat,
+	exportFileName,
+	renderHtml,
+	renderMarkdown,
+} from "../../conversations/export.js";
 import type { ConversationService } from "../../conversations/service.js";
 import type { SessionHub } from "../../session/hub.js";
 import type { PiuiFastify } from "../auth.js";
-import { openSse, SSE_PING_INTERVAL_MS } from "../sse.js";
+import { ApiError } from "../errors.js";
+import { MAX_SUBSCRIBERS_PER_CONVERSATION, openSse, SSE_PING_INTERVAL_MS } from "../sse.js";
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
@@ -155,6 +164,48 @@ export async function registerConversationRoutes(
 		},
 	);
 
+	// spec/09-api.md §8 — export. All three formats render in piui (plan/spikes/13 §1).
+	app.get<{ Params: { id: string }; Querystring: { format?: string } }>(
+		"/api/conversations/:id/export",
+		async (req, reply) => {
+			const format = (req.query.format ?? "md") as ExportFormat;
+			if (!EXPORT_FORMATS.includes(format)) {
+				throw new ApiError(
+					"validation_error",
+					`format must be one of ${EXPORT_FORMATS.join(", ")}.`,
+				);
+			}
+			const { conversation, messages } = await service.exportData(req.principal!, req.params.id);
+			const fileName = exportFileName(conversation, format);
+			reply.header("content-disposition", `attachment; filename="${fileName}"`);
+			if (format === "json") {
+				reply.type("application/json");
+				return reply.send({ conversation, messages });
+			}
+			if (format === "md") {
+				reply.type("text/markdown; charset=utf-8");
+				return reply.send(renderMarkdown(conversation, messages));
+			}
+			reply.type("text/html; charset=utf-8");
+			return reply.send(renderHtml(conversation, messages));
+		},
+	);
+
+	app.post<{ Params: { id: string }; Body: { customInstructions?: string } }>(
+		"/api/conversations/:id/compact",
+		{
+			schema: {
+				body: {
+					type: "object",
+					additionalProperties: false,
+					properties: { customInstructions: { type: "string", maxLength: 2000 } },
+				},
+			},
+		},
+		async (req): Promise<CompactResponse> =>
+			service.compact(req.principal!, req.params.id, req.body?.customInstructions),
+	);
+
 	app.post<{ Params: { id: string } }>(
 		"/api/conversations/:id/abort",
 		async (req): Promise<AbortResponse> => ({
@@ -212,6 +263,14 @@ export async function registerConversationRoutes(
 		async (req, reply) => {
 			// Authorization first: an invisible conversation must 404 before the stream opens.
 			await service.get(req.principal!, req.params.id);
+			// spec/11-security.md §5 — the per-conversation subscriber cap, checked before the
+			// socket is hijacked so the client gets a real error envelope.
+			if (hub.channel(req.params.id).subscriberCount >= MAX_SUBSCRIBERS_PER_CONVERSATION) {
+				throw new ApiError(
+					"rate_limited",
+					`This conversation already has ${MAX_SUBSCRIBERS_PER_CONVERSATION} open event streams.`,
+				);
+			}
 			const live = await hub.ensure(req.params.id);
 
 			const channel = openSse(req, reply);

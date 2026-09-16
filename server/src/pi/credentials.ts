@@ -13,6 +13,7 @@ import type {
 } from "@piui/shared";
 import { ApiError } from "../http/errors.js";
 import type { IdGen } from "../util/clock.js";
+import { redact } from "../util/redact.js";
 import type { ModelRuntime } from "./runtime.js";
 
 export const FLOW_TTL_MS = 5 * 60 * 1000;
@@ -21,17 +22,8 @@ export const MAX_FLOWS_PER_PROVIDER = 3;
 export const MAX_FLOWS = 10;
 const REFRESH_DEADLINE_MS = 15_000;
 
-/** Anything key-shaped is scrubbed before a provider message reaches a log or a client. */
-const KEY_SHAPED = /\b(sk|pat|ghp|xoxb|gsk|api)[-_][A-Za-z0-9_-]{8,}/g;
-
-export function sanitizeMessage(message: string, secrets: readonly string[] = []): string {
-	let out = message;
-	for (const secret of secrets) {
-		if (secret.length < 4) continue;
-		while (out.includes(secret)) out = out.replace(secret, "***");
-	}
-	return out.replace(KEY_SHAPED, "***");
-}
+/** Kept as the credential-flow spelling of the shared scrubber (server/src/util/redact.ts). */
+export const sanitizeMessage = redact;
 
 interface PendingPrompt {
 	id: string;

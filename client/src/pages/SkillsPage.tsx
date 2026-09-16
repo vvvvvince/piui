@@ -3,7 +3,7 @@
 import type { SkillDetail, SkillSummary, SkillTemplate } from "@piui/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { type ApiClientError, api } from "../api/client.js";
 import { CodeEditor } from "../components/CodeEditor.js";
 
@@ -17,7 +17,17 @@ export function SkillsPage(): JSX.Element {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
 	const list = useQuery({ queryKey: ["skills"], queryFn: api.skills });
-	const [selectedId, setSelectedId] = useState<string | null>(null);
+	// spec/10-frontend.md §1 lists `/skills/:id`: the open editor is reflected in the URL, so a
+	// deep link and a reload both land on the same skill (found in the browser, M7).
+	const { id: routeId } = useParams<{ id: string }>();
+	const [selectedId, setSelected] = useState<string | null>(routeId ?? null);
+	useEffect(() => {
+		if (routeId !== undefined && routeId !== selectedId) setSelected(routeId);
+	}, [routeId, selectedId]);
+	const setSelectedId = (id: string | null): void => {
+		setSelected(id);
+		navigate(id ? `/skills/${id}` : "/skills", { replace: true });
+	};
 	const [search, setSearch] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
@@ -325,7 +335,10 @@ function SkillEditor({
 	const validation = data.validation;
 
 	return (
-		<div className="mt-3 grid grid-cols-[180px_1fr] gap-3 border-t border-slate-800 pt-3">
+		<div
+			data-testid="skill-editor"
+			className="mt-3 grid grid-cols-[180px_1fr] gap-3 border-t border-slate-800 pt-3"
+		>
 			<div className="space-y-1 text-xs" data-testid="skill-file-tree">
 				{data.files.map((file) => (
 					<div key={file.path} className="flex items-center justify-between gap-1">

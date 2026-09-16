@@ -11,7 +11,7 @@ import type {
 	ToolsResponse,
 } from "@piui/shared";
 import type { AppContext } from "../../context.js";
-import { ProviderNotConfiguredError } from "../../search/providers.js";
+import { ProviderNotConfiguredError, SearchProviderError } from "../../search/providers.js";
 import type { Services } from "../../services.js";
 import type { PiuiFastify } from "../auth.js";
 import { ApiError } from "../errors.js";
@@ -191,7 +191,21 @@ export async function registerToolRoutes(
 						"No web-search provider is configured on this server (PIUI_SEARCH_PROVIDER / PIUI_SEARCH_API_KEY).",
 					);
 				}
-				throw new ApiError("internal_error", (error as Error).message);
+				// spec/11-security.md §8: the provider's own words (and body) stay server-side; the
+				// client gets the shape of the failure and a pointer at the configuration.
+				if (error instanceof SearchProviderError) {
+					ctx.logger.warn(
+						{ event: "search_provider_error", provider: services.search.id, detail: error.detail },
+						error.message,
+					);
+					throw new ApiError(
+						"provider_not_configured",
+						`The ${services.search.id} search provider rejected the request (${error.message.replace(/^search provider answered /, "HTTP ")}). Check its configuration.`,
+						undefined,
+						502,
+					);
+				}
+				throw new ApiError("internal_error", "The search provider could not be reached.");
 			}
 		},
 	);

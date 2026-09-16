@@ -21,6 +21,8 @@ export interface ApiErrorBody {
 		code: ApiErrorCode;
 		message: string;
 		details?: { path: string; message: string }[];
+		/** spec/11-security.md §8 — pairs an `internal_error` with its server log line. */
+		correlationId?: string;
 	};
 }
 
@@ -732,6 +734,18 @@ export interface ConversationStatsResponse {
 	cost: number;
 	contextUsage: { tokens: number; contextWindow: number; percent: number } | null;
 	messages: { user: number; assistant: number; toolCalls: number };
+}
+
+/** spec/09-api.md §8 — `POST /api/conversations/:id/compact`. */
+export interface CompactRequest {
+	customInstructions?: string;
+}
+
+export interface CompactResponse {
+	summary: string;
+	tokensBefore: number;
+	estimatedTokensAfter: number;
+	cost: number;
 }
 
 /** spec/09-api.md §9 — the global notification channel. */

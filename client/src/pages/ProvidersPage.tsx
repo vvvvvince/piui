@@ -1,13 +1,15 @@
 // /settings/providers — ProviderTable + CredentialDialog (spec/14-credentials.md §4).
 import type {
 	AuthFlowView,
+	GlobalEvent,
 	ProviderStatus,
 	ProvidersResponse,
 	VerifyProviderResponse,
 } from "@piui/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { type ApiClientError, api } from "../api/client.js";
+import { useGlobalEvents } from "../hooks/useGlobalEvents.js";
 
 function StatusPill({ provider }: { provider: ProviderStatus }): JSX.Element {
 	if (!provider.configured) {
@@ -254,22 +256,18 @@ export function ProvidersPage(): JSX.Element {
 	const [verified, setVerified] = useState<Record<string, VerifyProviderResponse>>({});
 	const [error, setError] = useState<string | null>(null);
 
-	// Another tab changed a credential: refresh (spec/14-credentials.md §9.6).
-	useEffect(() => {
-		const source = new EventSource("/api/events");
-		source.onmessage = (event: MessageEvent<string>) => {
-			try {
-				const parsed = JSON.parse(event.data) as { type: string };
-				if (parsed.type === "providers_changed") {
-					void queryClient.invalidateQueries({ queryKey: ["providers"] });
-					void queryClient.invalidateQueries({ queryKey: ["models"] });
-				}
-			} catch {
-				/* ignore */
-			}
-		};
-		return () => source.close();
-	}, [queryClient]);
+	// Another tab changed a credential: refresh (spec/14-credentials.md §9.6). One shared
+	// channel per tab since M7 (spec/09-api.md §9).
+	useGlobalEvents(
+		useCallback(
+			(event: GlobalEvent) => {
+				if (event.type !== "providers_changed") return;
+				void queryClient.invalidateQueries({ queryKey: ["providers"] });
+				void queryClient.invalidateQueries({ queryKey: ["models"] });
+			},
+			[queryClient],
+		),
+	);
 
 	const verify = useMutation({
 		mutationFn: (id: string) => api.verifyProvider(id),

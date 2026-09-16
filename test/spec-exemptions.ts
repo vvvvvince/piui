@@ -13,6 +13,7 @@ export const COMPLETED_MILESTONES = [
 	"M5b",
 	"M5c",
 	"M6",
+	"M7",
 ] as const;
 
 /** Permanently exempt: manual, environmental, or process criteria. */
@@ -23,6 +24,23 @@ export const exemptions: Record<string, string> = {
 		"'every merge commit has a green suite' is a branch-protection rule, not a runnable assertion",
 	"20-development-method#9.6":
 		"mutation spot-check is performed by hand once per milestone and recorded in plan/milestone-notes.md",
+	// M7: the remaining container criteria need a running Docker daemon and, for 9.10, the real
+	// network. They are executed by hand at the milestone gate and recorded in
+	// plan/milestone-notes.md §M7 ("verified by hand"), with the exact commands.
+	"19-deployment#9.5":
+		"needs a running container + bind mount: the host-side uid 10001 ownership cannot be asserted offline",
+	"19-deployment#9.6":
+		"'docker compose restart/down -v' semantics are a Docker behaviour, verified by hand at the gate",
+	"19-deployment#9.7":
+		"graceful shutdown on `docker stop` is observed in container logs at the gate; vitest has no PID 1",
+	"19-deployment#9.10":
+		"end-to-end SearXNG needs the image pulled and real network; the wiring and settings file are asserted offline",
+	"19-deployment#9.11":
+		"building a derived image from the documented example needs a Docker daemon; run by hand at the gate",
+	// spec/10-frontend.md §4's UX states are design criteria: the ones with observable markup are
+	// covered by component tests ([10-frontend#4.x] in UxStates.test.tsx / Routes.test.tsx), the
+	// rest (visual design of skeletons, pulse, focus rings) are a manual pass recorded in the
+	// milestone notes.
 };
 
 /**
@@ -30,16 +48,7 @@ export const exemptions: Record<string, string> = {
  * pending tag belongs to a completed milestone, so this list cannot rot silently.
  */
 export const pending: Record<string, string> = {
-	// 14-credentials §§9.1-9.6, 9.8-9.10 landed in M2; 9.7 in M1.
-	"19-deployment#9.4": "M7",
-	// M4 covers its second half offline (`PIUI_WORKSPACE_ROOTS` refuses a path outside the roots,
-	// server/test/integration/workspaces.test.ts). The first half — an *agent* run writing a file
-	// that lands on the host as uid 10001 — needs agent mode (M5) and a running container: M7.
-	"19-deployment#9.5": "M7",
-	"19-deployment#9.6": "M7",
-	"19-deployment#9.7": "M7",
-	// M3 ships the searxng provider and the compose `search` profile is wired, but "works end to
-	// end against the bundled SearXNG" needs the image pulled and running: an M7 container check.
-	"19-deployment#9.10": "M7",
-	"19-deployment#9.11": "M7",
+	// Everything M0-M7 is either tested or exempted above; nothing is parked for a later
+	// milestone in V1. Items deferred beyond V1 are marked `[LATER]` in the spec itself and
+	// therefore produce no acceptance criteria.
 };

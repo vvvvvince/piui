@@ -1,0 +1,15 @@
+# Minimal SearXNG settings for piui's optional `search` compose profile.
+# piui talks to SearXNG over `/search?format=json`, which the stock image does not enable
+# (it answers 403 with an HTML error page), so the JSON format is turned on here.
+use_default_settings: true
+
+server:
+  # Only reachable on the compose network; piui publishes nothing for SearXNG.
+  secret_key: "piui-local-searxng-not-a-secret"
+  limiter: false
+  image_proxy: true
+
+search:
+  formats:
+    - html
+    - json

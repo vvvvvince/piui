@@ -409,9 +409,16 @@ function Blocks({ blocks }: { blocks: UiBlock[] }): JSX.Element {
 	);
 }
 
-export function MessageBubble({ message }: { message: UiMessage }): JSX.Element {
+export function MessageBubble({
+	message,
+	onRetry,
+}: {
+	message: UiMessage;
+	onRetry?: () => void;
+}): JSX.Element {
 	const isUser = message.role === "user";
 	const isError = message.role === "error";
+	const isSystem = message.role === "system";
 	// spec/15-commands-and-input.md §1.3 — show the typed command, not the expansion.
 	const [showExpanded, setShowExpanded] = useState(false);
 	const echo = message.commandEcho;
@@ -422,7 +429,9 @@ export function MessageBubble({ message }: { message: UiMessage }): JSX.Element 
 					? "ml-12 border-sky-900 bg-sky-950/40"
 					: isError
 						? "mr-12 border-rose-900 bg-rose-950/30"
-						: "mr-12 border-slate-800 bg-slate-900/40"
+						: isSystem
+							? "border-amber-900/60 bg-amber-950/20 text-slate-300"
+							: "mr-12 border-slate-800 bg-slate-900/40"
 			}`}
 			data-role={message.role}
 		>
@@ -456,6 +465,35 @@ export function MessageBubble({ message }: { message: UiMessage }): JSX.Element 
 					))}
 				</ul>
 			)}
+			{/* spec/10-frontend.md §4.5 — an error carries the provider text, a Retry and a way
+			    to copy the details out. */}
+			{isError && (
+				<div className="mt-2 flex gap-3 text-[11px]">
+					{onRetry && (
+						<button
+							type="button"
+							data-testid="message-retry"
+							className="rounded border border-rose-800 px-2 py-0.5 text-rose-200"
+							onClick={onRetry}
+						>
+							Retry
+						</button>
+					)}
+					<button
+						type="button"
+						data-testid="message-copy-details"
+						className="underline text-slate-400"
+						onClick={() => {
+							const text = message.blocks
+								.map((block) => (block.type === "text" ? block.text : ""))
+								.join("\n");
+							void navigator.clipboard?.writeText(text);
+						}}
+					>
+						copy details
+					</button>
+				</div>
+			)}
 			{!isUser && <SourcesFooter message={message} />}
 			<footer className="mt-2 flex gap-3 text-[11px] text-slate-500">
 				{message.model && <span>{message.model}</span>}
@@ -471,7 +509,13 @@ export function MessageBubble({ message }: { message: UiMessage }): JSX.Element 
 	);
 }
 
-export function MessageList({ messages }: { messages: UiMessage[] }): JSX.Element {
+export function MessageList({
+	messages,
+	onRetry,
+}: {
+	messages: UiMessage[];
+	onRetry?: () => void;
+}): JSX.Element {
 	const bottom = useRef<HTMLDivElement>(null);
 	const container = useRef<HTMLDivElement>(null);
 	const [collapse, setCollapse] = useState({ thinking: false, tools: false, version: 0 });
@@ -531,9 +575,21 @@ export function MessageList({ messages }: { messages: UiMessage[] }): JSX.Elemen
 			)}
 			<Collapse.Provider value={collapse}>
 				{messages.map((message) => (
-					<MessageBubble key={message.id} message={message} />
+					<MessageBubble
+						key={message.id}
+						message={message}
+						{...(message.role === "error" && onRetry ? { onRetry } : {})}
+					/>
 				))}
 			</Collapse.Provider>
+			{/* spec/10-frontend.md §4.4 — a long silent tool must not look frozen. */}
+			{messages.some((message) =>
+				message.blocks.some((block) => block.type === "tool" && block.state === "running"),
+			) && (
+				<p data-testid="working-indicator" className="text-xs text-slate-400">
+					<span className="motion-safe:animate-pulse">●</span> working…
+				</p>
+			)}
 			<div ref={bottom} />
 		</div>
 	);

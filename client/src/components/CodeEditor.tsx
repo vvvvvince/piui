@@ -1,5 +1,6 @@
 // The one code editor in piui (spec/10-frontend.md §2: `SkillEditor … + CodeMirror`).
 // Kept deliberately thin: CodeMirror 6 through @uiw/react-codemirror, markdown mode, dark theme.
+import { javascript } from "@codemirror/lang-javascript";
 import { markdown } from "@codemirror/lang-markdown";
 import CodeMirror from "@uiw/react-codemirror";
 
@@ -10,6 +11,8 @@ export interface CodeEditorProps {
 	height?: string;
 	testId?: string;
 	ariaLabel?: string;
+	/** Extension sources are TypeScript/JavaScript; everything else piui edits is Markdown. */
+	language?: "markdown" | "javascript";
 }
 
 export function CodeEditor({
@@ -19,6 +22,7 @@ export function CodeEditor({
 	height = "360px",
 	testId,
 	ariaLabel,
+	language = "markdown",
 }: CodeEditorProps): JSX.Element {
 	return (
 		<div
@@ -29,7 +33,7 @@ export function CodeEditor({
 				value={value}
 				height={height}
 				theme="dark"
-				extensions={[markdown()]}
+				extensions={[language === "javascript" ? javascript({ typescript: true }) : markdown()]}
 				readOnly={readOnly === true}
 				aria-label={ariaLabel ?? "editor"}
 				basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: !readOnly }}

@@ -5,7 +5,9 @@ import { createAssistantMessageEventStream } from "@earendil-works/pi-ai/utils/e
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 export type ScriptItem =
-	| { text: string }
+	// `chunk` overrides the provider's delta size for this item: a compaction test needs a
+	// 150 KB answer, and 30 000 five-character deltas would take longer than the assertion.
+	| { text: string; chunk?: number }
 	| { thinking: string }
 	| { toolCall: { name: string; args: Record<string, unknown>; id?: string } }
 	| { error: { status: number; message: string } }
@@ -117,7 +119,7 @@ export function registerFakeProvider(
 						output.content.push({ type: "text", text: "" });
 						const i = output.content.length - 1;
 						stream.push({ type: "text_start", contentIndex: i, partial: output });
-						for (const piece of chunk(item.text, chunkSize)) {
+						for (const piece of chunk(item.text, item.chunk ?? chunkSize)) {
 							output.content[i].text += piece;
 							stream.push({ type: "text_delta", contentIndex: i, delta: piece, partial: output });
 						}

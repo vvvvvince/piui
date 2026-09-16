@@ -34,11 +34,15 @@ export class ProviderNotConfiguredError extends Error {
 	}
 }
 
-/** The provider answered, but not with results. Never carries the key. */
+/** The provider answered, but not with results. Never carries the key or the response body. */
 export class SearchProviderError extends Error {
-	constructor(message: string) {
+	/** The upstream body, for the server log only — never for a client or a model. */
+	readonly detail: string | undefined;
+
+	constructor(message: string, detail?: string) {
 		super(message);
 		this.name = "SearchProviderError";
+		this.detail = detail;
 	}
 }
 
@@ -219,13 +223,14 @@ async function readJson(
 		);
 	}
 	if (!response.ok) {
+		// The body is the *provider's* error page: it is logged, never returned to the client
+		// (spec/11-security.md §8). Found in the container, where SearXNG without
+		// `formats: [json]` answers 403 with an HTML page piui used to echo back verbatim.
 		const snippet = scrub(
 			(await response.text().catch(() => "")).slice(0, 200),
 			deps.config.searchApiKey,
 		);
-		throw new SearchProviderError(
-			`search provider answered ${response.status}${snippet ? `: ${snippet}` : ""}`,
-		);
+		throw new SearchProviderError(`search provider answered ${response.status}`, snippet);
 	}
 	try {
 		return await response.json();

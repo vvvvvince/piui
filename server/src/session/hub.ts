@@ -29,6 +29,13 @@ export interface HubSession {
 		},
 	): Promise<void>;
 	abort(): Promise<void>;
+	/** spec/09-api.md §8 — manual compaction (spike plan/spikes/13 §2). */
+	compact(customInstructions?: string): Promise<{
+		summary: string;
+		tokensBefore: number;
+		estimatedTokensAfter?: number;
+		usage?: { cost?: { total?: number } };
+	}>;
 	clearQueue(): { steering: string[]; followUp: string[] };
 	// pi 0.85.1 exposes the queue as two getters, not the `getPendingMessages()` of spike S7.
 	getSteeringMessages(): readonly string[];
@@ -62,6 +69,8 @@ export interface HubDeps {
 	maxRunMinutes: number;
 	maxToolCallsPerRun: number;
 	onRunEnd?(conversationId: string, session: HubSession): void;
+	/** spec/11-security.md §7 — dangerous tool invocations get an audit line. */
+	onToolCall?(conversationId: string, name: string, args: unknown): void;
 }
 
 /**
@@ -256,10 +265,13 @@ export class LiveSession {
 	}
 
 	snapshot(): UiEvent {
+		return { type: "snapshot", seq: this.seq, ...this.snapshotBody() };
+	}
+
+	/** The snapshot payload without a sequence: `emit()` stamps one when it is pushed. */
+	private snapshotBody(): Omit<Extract<UiEvent, { type: "snapshot" }>, "type" | "seq"> {
 		const pendingUiRequests = this.channel.pendingUiRequests;
 		return {
-			type: "snapshot",
-			seq: this.seq,
 			messages: this.messages(),
 			state: this.state,
 			...(pendingUiRequests.length > 0 ? { pendingUiRequests } : {}),
@@ -296,6 +308,11 @@ export class LiveSession {
 
 		switch (event.type) {
 			case "tool_execution_start":
+				this.deps.onToolCall?.(
+					this.conversationId,
+					String(event.toolName ?? event.name ?? ""),
+					event.args,
+				);
 				this.toolCallsThisRun += 1;
 				if (this.toolCallsThisRun > this.deps.maxToolCallsPerRun) {
 					this.tripGuard(
@@ -338,6 +355,29 @@ export class LiveSession {
 			case "queue_update":
 				this.emit({ type: "state", state: this.state });
 				break;
+			// spec/09-api.md §8 — compaction is visible in the transcript, manual or automatic.
+			case "compaction_start":
+				this.emit({ type: "state", state: this.state });
+				this.emit({
+					type: "notice",
+					level: "info",
+					text:
+						event.reason === "manual"
+							? "Compacting the context…"
+							: `Compacting the context automatically (${String(event.reason)})…`,
+				});
+				break;
+			case "compaction_end": {
+				const errorMessage = event.errorMessage as string | undefined;
+				this.emit({
+					type: "notice",
+					level: errorMessage ? "warning" : "info",
+					text: errorMessage ?? "Context compacted.",
+				});
+				this.emit({ type: "state", state: this.state });
+				if (!errorMessage) this.emit({ type: "snapshot", ...this.snapshotBody() });
+				break;
+			}
 			default:
 				break;
 		}

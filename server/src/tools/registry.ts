@@ -167,6 +167,15 @@ export class ToolRegistry {
 		return missing;
 	}
 
+	/**
+	 * spec/11-security.md §7 — which invocations get an audit line. A name piui does not know
+	 * is an HTTP tool or an extension tool, both of which §7 lists: unknown means dangerous.
+	 */
+	isDangerous(name: string): boolean {
+		const builtin = [...BUILTIN_PI_TOOLS, ...BUILTIN_PIUI_TOOLS].find((t) => t.name === name);
+		return builtin ? builtin.dangerous : true;
+	}
+
 	list(): ToolCatalogItem[] {
 		const disabled = this.deps.repos.tools.disabledNames();
 		const usage = this.deps.repos.tools.profileUsage();

@@ -57,6 +57,17 @@ export interface Services {
 	dispose(): Promise<void>;
 }
 
+/** spec/11-security.md §7: "a truncated argument summary", never full file contents. */
+function summarizeArgs(args: unknown): string {
+	let text: string;
+	try {
+		text = typeof args === "string" ? args : JSON.stringify(args ?? null);
+	} catch {
+		text = "(unserializable)";
+	}
+	return text.length > 160 ? `${text.slice(0, 160)}…` : text;
+}
+
 export async function createServices(ctx: AppContext): Promise<Services> {
 	const { runtime, fakeModel } = await createPiRuntime(ctx.config);
 	const events = new GlobalEventBus();
@@ -117,6 +128,19 @@ export async function createServices(ctx: AppContext): Promise<Services> {
 		maxToolCallsPerRun: ctx.config.maxToolCallsPerRun,
 		onRunEnd: (conversationId, session) =>
 			services.conversations.recordRunEnd(conversationId, session),
+		// spec/11-security.md §7 — `bash`, `write`, `edit`, HTTP tools and extension tools, with a
+		// truncated argument summary and never the full content.
+		onToolCall: (conversationId, name, args) => {
+			if (!tools.isDangerous(name)) return;
+			ctx.audit.record({
+				actor: "agent",
+				action: "tool.invoke",
+				target: name,
+				outcome: "ok",
+				conversationId,
+				args: summarizeArgs(args),
+			});
+		},
 	});
 
 	const services: Services = {

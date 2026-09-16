@@ -2,12 +2,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+// spec/10-frontend.md §4.1 — "no models available" is its own state, with an actionable card.
 import { api } from "../api/client.js";
 import { NewConversationDialog } from "../components/NewConversationDialog.js";
 
 export function ConversationsPage(): JSX.Element {
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const conversations = useQuery({ queryKey: ["conversations"], queryFn: api.conversations });
+	const models = useQuery({ queryKey: ["models"], queryFn: () => api.models() });
+	const noCredentials =
+		models.data !== undefined && !models.data.items.some((model) => model.available);
 
 	return (
 		<div className="space-y-4">
@@ -21,6 +25,23 @@ export function ConversationsPage(): JSX.Element {
 					New chat
 				</button>
 			</header>
+
+			{noCredentials && (
+				<div
+					data-testid="no-credentials-card"
+					className="rounded border border-amber-800 bg-amber-950/30 p-4 text-sm text-amber-100"
+				>
+					<p className="font-medium">No model credentials found.</p>
+					<p className="mt-1 text-amber-200/80">
+						piui needs one provider key before it can run a conversation.{" "}
+						<Link to="/settings/providers" className="underline">
+							Add a provider key
+						</Link>{" "}
+						— or run <code>pi</code> in a terminal and log in there; piui shares the same
+						<code> auth.json</code>.
+					</p>
+				</div>
+			)}
 
 			{conversations.isPending && (
 				<ul className="space-y-2" aria-label="Loading conversations">

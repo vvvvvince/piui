@@ -146,6 +146,38 @@ describe("POST /api/tools/web_search/test", () => {
 	});
 });
 
+describe("search provider failures", () => {
+	// Found in the container (M7): a SearXNG without `formats: [html, json]` answers 403 with an
+	// HTML error page, and piui echoed that page back as `500 internal_error`.
+	it("[11-security#8.3] never echoes the provider's response body to the client", async () => {
+		await withTestApp(
+			async ({ app, mint }) => {
+				const res = await app.inject({
+					method: "POST",
+					url: "/api/tools/web_search/test",
+					headers: { ...mint().headers, ...json },
+					payload: { query: "node lts" },
+				});
+				expect(res.statusCode).toBe(502);
+				const error = res.json<ApiErrorBody>().error;
+				expect(error.code).toBe("provider_not_configured");
+				expect(error.message).toMatch(/searxng/i);
+				expect(error.message).toMatch(/403/);
+				expect(res.payload).not.toContain("<!doctype html>");
+				expect(res.payload).not.toContain("Forbidden");
+			},
+			{
+				env: { PIUI_SEARCH_PROVIDER: "searxng", PIUI_SEARXNG_URL: "http://searxng:8080" },
+				fetch: (async () =>
+					new Response("<!doctype html>\n<title>403 Forbidden</title><h1>Forbidden</h1>", {
+						status: 403,
+						headers: { "content-type": "text/html" },
+					})) as unknown as typeof fetch,
+			},
+		);
+	});
+});
+
 describe("global tool disable", () => {
 	it("[05-skills-and-tools#B.5.4] disabling bash globally strips it from a profile's resolved set", async () => {
 		await withWorkspace(async (ws) => {

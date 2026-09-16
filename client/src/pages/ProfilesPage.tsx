@@ -1,9 +1,11 @@
 // /profiles — the profile list and editor (spec/03-profiles.md §§2-5, spec/10-frontend.md §2).
-// AGENTS.md is edited in a plain textarea with a counter; a CodeMirror upgrade is M6's call.
+// AGENTS.md is edited with the shared CodeEditor (CodeMirror 6) plus a size counter.
 import type { ProfileDetail, SkillSummary, ToolCatalogItem } from "@piui/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { type ApiClientError, api } from "../api/client.js";
+import { CodeEditor } from "../components/CodeEditor.js";
 
 const AGENTS_MD_WARN_BYTES = 16 * 1024;
 const kb = (bytes: number): string =>
@@ -13,8 +15,26 @@ type Tab = "instructions" | "tools" | "skills" | "extensions" | "memory";
 
 export function ProfilesPage(): JSX.Element {
 	const queryClient = useQueryClient();
-	const [selectedId, setSelectedId] = useState<string | null>(null);
-	const [creating, setCreating] = useState(false);
+	// spec/10-frontend.md §1 — `/profiles/:id` and `/profiles/new` are real URLs.
+	const { id: routeId } = useParams<{ id: string }>();
+	const navigate = useNavigate();
+	const [selectedId, setSelected] = useState<string | null>(
+		routeId && routeId !== "new" ? routeId : null,
+	);
+	const [creating, setCreate] = useState(routeId === "new");
+	useEffect(() => {
+		if (routeId === undefined) return;
+		setCreate(routeId === "new");
+		if (routeId !== "new" && routeId !== selectedId) setSelected(routeId);
+	}, [routeId, selectedId]);
+	const setSelectedId = (id: string | null): void => {
+		setSelected(id);
+		navigate(id ? `/profiles/${id}` : "/profiles", { replace: true });
+	};
+	const setCreating = (open: boolean): void => {
+		setCreate(open);
+		navigate(open ? "/profiles/new" : "/profiles", { replace: true });
+	};
 
 	const profiles = useQuery({ queryKey: ["profiles"], queryFn: api.profiles });
 	const create = useMutation({
@@ -114,6 +134,7 @@ function NewProfileDialog({
 			<div
 				role="dialog"
 				aria-label="New profile"
+				data-testid="profile-create"
 				className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-4"
 			>
 				<h2 className="mb-2 text-lg font-semibold">New profile</h2>
@@ -266,11 +287,13 @@ function ProfileEditor({
 
 			{tab === "instructions" && (
 				<div className="mt-3">
-					<textarea
-						aria-label="AGENTS.md"
-						className="h-64 w-full rounded border border-slate-700 bg-slate-950 p-2 font-mono text-xs"
+					{/* M7's UX pass: the same CodeEditor the skill editor uses (M6 parked it here). */}
+					<CodeEditor
+						ariaLabel="AGENTS.md"
+						testId="agents-md-editor"
+						height="256px"
 						value={agentsMd ?? ""}
-						onChange={(event) => setAgentsMd(event.target.value)}
+						onChange={setAgentsMd}
 					/>
 					<div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
 						<span>{(agentsMd ?? "").length} characters</span>

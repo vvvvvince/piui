@@ -3,6 +3,15 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 export const SSE_PING_INTERVAL_MS = 20_000;
 
+/**
+ * spec/11-security.md §5 — "SSE subscriber cap per conversation (8) → 429". The client's
+ * EventSource retries with its existing backoff and the UI shows the reconnecting bar, so a
+ * refusal degrades into the disconnected state rather than into a blank page.
+ */
+export const MAX_SUBSCRIBERS_PER_CONVERSATION = 8;
+/** The global channel is one per tab; the cap is per process, since it is not per conversation. */
+export const MAX_GLOBAL_SUBSCRIBERS = 32;
+
 export interface SseChannel {
 	send(data: unknown, id?: number): void;
 	comment(text: string): void;
@@ -14,6 +23,9 @@ export function openSse(req: FastifyRequest, reply: FastifyReply): SseChannel {
 	// Take the socket away from Fastify: the handler writes frames for the life of the request.
 	reply.hijack();
 	reply.raw.writeHead(200, {
+		// A hijacked reply writes its own head, so the security headers the onRequest hook put on
+		// the reply have to be carried across by hand (spec/11-security.md §4).
+		...(reply.getHeaders() as Record<string, string>),
 		"Content-Type": "text/event-stream",
 		"Cache-Control": "no-cache, no-transform",
 		Connection: "keep-alive",

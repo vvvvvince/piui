@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Logger, pino } from "pino";
+import { AuditLog } from "./audit.js";
 import type { Config } from "./config.js";
 import { type Db, openDb } from "./db/index.js";
 import { createRepositories, type Repositories } from "./db/repositories/index.js";
@@ -26,6 +27,8 @@ export interface AppContext {
 	clock: Clock;
 	ids: IdGen;
 	logger: Logger;
+	/** spec/11-security.md §7 — $PIUI_HOME/logs/audit.jsonl. */
+	audit: AuditLog;
 	fetch: FetchLike;
 	/** DNS for the SSRF guard — injected so no test resolves a real name. */
 	lookup: LookupLike;
@@ -91,6 +94,7 @@ export function createContext(options: CreateContextOptions): AppContext {
 		clock,
 		ids,
 		logger,
+		audit: new AuditLog(join(config.paths.logs, "audit.jsonl"), () => clock.nowIso()),
 		fetch: options.fetch ?? globalThis.fetch,
 		lookup: options.lookup ?? systemLookup,
 		sleep: options.sleep ?? realSleep,

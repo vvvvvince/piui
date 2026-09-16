@@ -64,10 +64,12 @@ export class ApiError extends Error {
 		readonly code: ApiErrorCode,
 		message: string,
 		readonly details?: { path: string; message: string }[],
+		/** Overrides the code's default status (an upstream 4xx is a gateway failure, not ours). */
+		statusCode?: number,
 	) {
 		super(message);
 		this.name = "ApiError";
-		this.statusCode = STATUS_BY_CODE[code] ?? 500;
+		this.statusCode = statusCode ?? STATUS_BY_CODE[code] ?? 500;
 	}
 
 	toBody(): ApiErrorBody {

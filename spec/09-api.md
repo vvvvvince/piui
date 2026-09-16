@@ -166,7 +166,8 @@ Additional error codes: `provider_not_found`, `provider_ambient_only`,
 | GET | `/api/skills/:id/files/*` | raw file content (text only, 512 KB cap) |
 | PUT | `/api/skills/:id/files/*` | `{ content }` — create/overwrite a file inside the skill dir; path traversal rejected |
 | DELETE | `/api/skills/:id/files/*` | remove a file (never `SKILL.md`) |
-| POST | `/api/skills/import` | multipart `.zip` **or** `{ path }` to register an external dir **or** `{ skillMd }` → `201 SkillSummary` |
+| POST | `/api/skills/import` | JSON: `{ path }` to register an external dir **or** `{ skillMd }` → `201 SkillSummary` |
+| POST | `/api/skills/import-zip` | multipart `.zip` → `201 SkillSummary`. *(Erratum, M7: fastify binds one content-type parser per path, so the zip upload has its own route rather than sharing `/api/skills/import`.)* |
 | POST | `/api/skills/rescan` | `200 { added, updated, missing }` |
 | POST | `/api/skills/:id/validate` | `200 { errors: string[], warnings: string[] }` |
 | POST | `/api/skills/:id/test` | `201 { conversationId, ephemeral: true }` (see `05-skills-and-tools.md` A.4) |

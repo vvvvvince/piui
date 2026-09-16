@@ -5,6 +5,7 @@ import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import type { HealthResponse, MetaResponse } from "@piui/shared";
 import Fastify from "fastify";
+import { auditAction, outcomeForStatus } from "../audit.js";
 import type { AppContext } from "../context.js";
 import { ForbiddenError, NotFoundError } from "../db/repositories/base.js";
 import { createServices, type Services } from "../services.js";
@@ -21,6 +22,7 @@ import { registerSkillRoutes } from "./routes/skills.js";
 import { registerToolRoutes } from "./routes/tools.js";
 import { registerUploadRoutes } from "./routes/uploads.js";
 import { registerWorkspaceRoutes } from "./routes/workspaces.js";
+import { securityHeaders } from "./security.js";
 
 declare module "fastify" {
 	interface FastifyInstance {
@@ -30,6 +32,20 @@ declare module "fastify" {
 }
 
 export type PiuiServer = Awaited<ReturnType<typeof buildServer>>;
+
+/** Fastify's content-type-parser refusals, said in the error envelope's voice. */
+function transportErrorMessage(code: string): string {
+	switch (code) {
+		case "FST_ERR_CTP_EMPTY_JSON_BODY":
+			return "The request body is empty. Send a JSON body, or drop the content-type header.";
+		case "FST_ERR_CTP_INVALID_MEDIA_TYPE":
+			return "Unsupported content-type for this route.";
+		case "FST_ERR_CTP_BODY_TOO_LARGE":
+			return "The request body is too large.";
+		default:
+			return "The request body could not be read.";
+	}
+}
 
 export async function buildServer(ctx: AppContext, injected?: Services) {
 	const { config } = ctx;
@@ -49,8 +65,31 @@ export async function buildServer(ctx: AppContext, injected?: Services) {
 		limits: { files: 1, fileSize: Math.max(config.maxUploadMb, 64) * 1024 * 1024 },
 	});
 
+	// spec/11-security.md §4 — on every response, before anything can answer.
+	const headers = securityHeaders(config);
+	app.addHook("onRequest", (_req, reply, done) => {
+		for (const [name, value] of Object.entries(headers)) reply.header(name, value);
+		done();
+	});
+
 	const loginLimiter = new LoginRateLimiter(() => ctx.clock.nowMs());
 	await registerAuth(app, { ctx, provider: ctx.authProvider, limiter: loginLimiter });
+
+	// spec/11-security.md §7 — one audit line per mutation, whatever the outcome. A hook rather
+	// than per-route calls: a route added later is audited by construction.
+	app.addHook("onResponse", (req, reply, done) => {
+		const mutation = auditAction(req.method, req.url);
+		if (mutation) {
+			ctx.audit.record({
+				actor: req.principal?.id ?? "anonymous",
+				action: mutation.action,
+				target: mutation.target,
+				outcome: outcomeForStatus(reply.statusCode),
+				status: reply.statusCode,
+			});
+		}
+		done();
+	});
 
 	// One log line per request (spec/01-architecture.md §1).
 	app.addHook("onResponse", (req, reply, done) => {
@@ -83,6 +122,16 @@ export async function buildServer(ctx: AppContext, injected?: Services) {
 			reply.status(403).send(new ApiError("forbidden", error.message).toBody());
 			return;
 		}
+		// Transport-level refusals (an empty JSON body, an unsupported media type, a body over the
+		// limit) are the client's fault and must read like it — found in the browser in M5c, where a
+		// DELETE with `content-type: application/json` and no body answered `400 internal_error`.
+		const fastifyCode = (error as { code?: string }).code;
+		if (typeof fastifyCode === "string" && fastifyCode.startsWith("FST_ERR_CTP_")) {
+			reply
+				.status(400)
+				.send(new ApiError("validation_error", transportErrorMessage(fastifyCode)).toBody());
+			return;
+		}
 		if (error.validation) {
 			reply.status(400).send(
 				new ApiError(
@@ -96,10 +145,14 @@ export async function buildServer(ctx: AppContext, injected?: Services) {
 			);
 			return;
 		}
-		req.log.error({ err: error }, "unhandled error");
+		// spec/11-security.md §8 — the stack stays in the server log; the client gets a code and
+		// the correlation id that finds that log line.
+		const correlationId = String(req.id);
+		req.log.error({ err: error, correlationId }, "unhandled error");
+		const body = new ApiError("internal_error", "Something went wrong on the server.").toBody();
 		reply
-			.status(error.statusCode ?? 500)
-			.send(new ApiError("internal_error", "Something went wrong on the server.").toBody());
+			.status(error.statusCode && error.statusCode >= 500 ? error.statusCode : 500)
+			.send({ error: { ...body.error, correlationId } });
 	});
 
 	app.setNotFoundHandler((req, reply) => {

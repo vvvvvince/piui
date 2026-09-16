@@ -5,11 +5,11 @@
 and a JSONL RPC mode. piui wraps the SDK in an HTTP/SSE server plus a browser client, so you can
 run chats and full agentic tasks from a browser instead of a terminal.
 
-> **Status: M2 complete (credentials + chat mode).** You can add a provider API key from
-> Settings → Providers, start a chat, watch tokens stream, steer/queue/stop a run, and survive a
-> reload and a server restart. Web search lands in M3, agent mode in M5. The
-> sections below marked *(M7)* are placeholders for the product documentation that the spec
-> requires to exist by then; do not delete the headings, fill them in.
+> **Status: V1 complete (M0–M7).** Chat and agent conversations, profiles, workspaces, skills,
+> HTTP tools, extensions, web search, image uploads, slash commands, export, compaction,
+> security headers, audit log and the Docker stack are all in place. See
+> [`plan/milestone-notes.md`](plan/milestone-notes.md) for what each milestone shipped and what
+> was deliberately deferred.
 
 ## Features
 
@@ -29,7 +29,7 @@ run chats and full agentic tasks from a browser instead of a terminal.
 | [`spec/`](spec/README.md) | The specification corpus. **Authoritative.** Start at [`spec/README.md`](spec/README.md) for reading order and the per-task context budget. |
 | [`plan/`](plan/README.md) | The implementation plan derived from the spec: milestones, spikes, risks, checklist. |
 | `shared/`, `server/`, `client/` | The implementation: shared DTOs, Fastify server, React SPA. |
-| `docs/` | *(M7)* `deployment.md`, `adding-a-provider.md`. |
+| [`docs/`](docs/deployment.md) | Product documentation: [`deployment.md`](docs/deployment.md), [`adding-a-provider.md`](docs/adding-a-provider.md). |
 
 ## Getting started
 
@@ -57,21 +57,53 @@ principal minting, an SSE collector, and a scripted fake model provider that dri
 
 ```bash
 cp .env.example .env     # then set PIUI_SESSION_SECRET (openssl rand -hex 32)
+mkdir -p workspaces && sudo chown 10001:10001 workspaces   # the container runs as uid 10001
 docker compose up -d     # http://127.0.0.1:8787
 ```
+
+(`chmod 777 workspaces` works too if you cannot use `sudo`; without one of the two, the agent
+cannot write into the bind-mounted folder and registering `/workspaces` fails with
+`path_not_writable`.)
 
 The container runs as uid 10001, carries `git`/`ripgrep`/`less` and nothing heavier, and keeps
 its state in the `piui-data` volume; `./workspaces` is bind-mounted so the files the agent
 writes stay visible on the host. Behind a corporate proxy, build with
 `docker build --network=host --build-arg HTTP_PROXY=$http_proxy --build-arg HTTPS_PROXY=$https_proxy -t piui:latest .`
 
-*(M7 — upgrade, backup and reset narrative moves to `docs/deployment.md`.)*
+Upgrade, backup, reset, derived images with extra tooling, and bare-metal notes live in
+[`docs/deployment.md`](docs/deployment.md).
 
-## Configuration *(M7)*
+## Configuration
 
-*(M7 — the full environment-variable table from `spec/01-architecture.md` §3, including
-`PIUI_PI_AUTH_PATH` and how to set it to `~/.piui/auth.json` to isolate piui's credentials from
-the pi CLI.)*
+Every variable is read once, in `server/src/config.ts`, into a frozen object.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PIUI_HOME` | `~/.piui` | Root for `piui.db`, `agent/` (pi sessions), `profiles/`, `skills/`, `prompts/`, `extensions/`, `uploads/`, `scratch/`, `trash/`, `logs/`. |
+| `PIUI_PORT` / `PIUI_HOST` | `8787` / `127.0.0.1` | Bind address. A non-loopback host needs `PIUI_ALLOW_REMOTE=1`. |
+| `PIUI_ALLOW_REMOTE` | unset | Permits binding beyond loopback, with a red boot warning and a UI banner. |
+| `PIUI_CONTAINER` | unset | Set by the shipped image; downgrades that warning (the network namespace is the boundary) and is reported by `/api/health`. |
+| `PIUI_INSECURE_TRANSPORT_OK` | unset | Operator acknowledgement that plaintext is acceptable; required for credential writes when requests do not arrive over HTTPS. |
+| `PIUI_SESSION_SECRET` | random per boot | HMAC key for the session cookie. Unset ⇒ logins die on restart (logged). |
+| `PIUI_USERNAME` / `PIUI_PASSWORD` | `test` / `test` | The single V1 account. **Change both** before publishing the port. |
+| `PIUI_AGENT_DIR` | `$PIUI_HOME/agent` | pi's `agentDir`: settings and `sessions/`. |
+| `PIUI_USER_AGENT_DIR` | `~/.pi/agent` | The *user's* pi dir, read-only: its `prompts/` and `skills/` are discovered like the TUI does. |
+| `PIUI_PI_AUTH_PATH` | `~/.pi/agent/auth.json` | Where pi stores credentials. Set it to `$PIUI_HOME/auth.json` to isolate piui from the CLI. |
+| `PIUI_DISABLE_CREDENTIAL_WRITES` | unset | `1` ⇒ every credential write route answers `403`. |
+| `PIUI_DISABLE_EXTENSION_INSTALL` | unset | `1` ⇒ every extension mutation answers `403`; status and per-profile disabling still work. |
+| `PIUI_WORKSPACE_ROOTS` | *(empty = any absolute path)* | Colon-separated allowlist of parent directories for workspaces. |
+| `PIUI_SEARCH_PROVIDER` | `brave` | `brave` \| `tavily` \| `searxng` \| `none`. |
+| `PIUI_SEARCH_API_KEY` / `PIUI_SEARXNG_URL` | — | Key for brave/tavily; base URL for SearXNG. |
+| `PIUI_ALLOW_PRIVATE_HTTP_TOOLS` | unset | `1` disarms the SSRF guard for `web_fetch` and HTTP tools. |
+| `PIUI_MAX_UPLOAD_MB` | `10` | Per-image upload limit. |
+| `PIUI_MAX_CONCURRENT_RUNS` | `4` | Global run semaphore ⇒ `429 too_many_runs`. |
+| `PIUI_MAX_RUN_MINUTES` | `30` | Wall-clock abort per run. |
+| `PIUI_MAX_TOOL_CALLS` | `200` | Tool calls per run before the run is stopped with a notice. |
+| `PIUI_LOG_LEVEL` | `debug` (dev) / `info` (prod) | pino level. |
+| `PIUI_FAKE_MODEL` / `PIUI_FAKE_SCRIPT` | unset | Dev/test only: registers the scripted fake provider. |
+
+Adding credentials, or a provider pi does not ship, is documented in
+[`docs/adding-a-provider.md`](docs/adding-a-provider.md).
 
 ### Web search (M3)
 
@@ -113,6 +145,20 @@ These statements are required by the spec and are covered by acceptance criteria
 - **The container is the isolation model**, not a hardening extra (decision Q10). The shipped
   `docker-compose.yaml` deliberately does **not** mount the Docker socket, the host network, or
   sensitive host paths: those mounts convert the container from a boundary into a formality.
+
+## Operating notes
+
+- **Audit log**: `$PIUI_HOME/logs/audit.jsonl`, one JSON line per mutation
+  (`ts`, `actor`, `action`, `target`, `outcome`) plus dangerous tool invocations. Append-only,
+  never rotated by piui, never containing a request body or a key-shaped string.
+- **Security headers**: `nosniff`, `no-referrer`, `DENY`, a `Permissions-Policy`, and a CSP that
+  allows `img-src https:` (favicons in the Sources footer) and nothing else off-origin. Uploads
+  are additionally served with `Content-Security-Policy: sandbox`.
+- **Caps**: 8 SSE subscribers per conversation and 32 per process, 60 messages/min and
+  120 `fs/browse`/min per session, 10 searches per run, 2000 events / 8 MB per conversation ring.
+- **Export**: `GET /api/conversations/:id/export?format=md|json|html`, rendered by piui (pi's
+  own HTML exporter is not reachable through its package exports — see
+  [`plan/spikes/13-export-and-compaction.md`](plan/spikes/13-export-and-compaction.md)).
 
 ## License
 

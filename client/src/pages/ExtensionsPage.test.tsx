@@ -83,8 +83,9 @@ describe("ExtensionsPage", () => {
 		await userEvent.type(screen.getByTestId("extension-url"), "https://example.com/remote.ts");
 		await userEvent.click(screen.getByTestId("extension-url-fetch"));
 
-		const source = (await screen.findByTestId("extension-review-source")) as HTMLTextAreaElement;
-		expect(source.value).toContain("export default function (pi) {}");
+		// CodeMirror renders the source as DOM text since M7's UX pass, not as a textarea value.
+		const source = await screen.findByTestId("extension-review-source");
+		expect(source).toHaveTextContent("export default function (pi) {}");
 		expect(screen.getByTestId("extension-review-install")).toHaveProperty("disabled", true);
 		// nothing installed by the fetch
 		expect(

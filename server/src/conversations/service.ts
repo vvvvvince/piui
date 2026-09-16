@@ -3,6 +3,7 @@
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type {
+	CompactResponse,
 	ConversationDetail,
 	ConversationStatsResponse,
 	ConversationSummary,
@@ -10,6 +11,7 @@ import type {
 	PatchConversationRequest,
 	Principal,
 	ThinkingLevel,
+	UiMessage,
 } from "@piui/shared";
 import type { AppContext } from "../context.js";
 import type { ConversationRow } from "../db/repositories/conversations.js";
@@ -355,6 +357,47 @@ export class ConversationService {
 	async abort(principal: Principal, id: string) {
 		this.ctx.repos.conversations.getOrThrow(principal, id);
 		return this.hub.abort(id);
+	}
+
+	/**
+	 * spec/09-api.md §8 — `POST /api/conversations/:id/compact`, synchronous: pi's `compact()`
+	 * aborts the current run first and resolves when the summary is written (spike
+	 * plan/spikes/13 §2), so there is nothing to poll and no run-like lifecycle to invent.
+	 */
+	async compact(
+		principal: Principal,
+		id: string,
+		customInstructions?: string,
+	): Promise<CompactResponse> {
+		const row = this.ctx.repos.conversations.getOrThrow(principal, id);
+		if (!row.session_path && !this.hub.peek(id)) {
+			throw new ApiError("conversation_busy", "Nothing to compact: this conversation is empty.");
+		}
+		const live = await this.hub.ensure(id);
+		try {
+			const result = await live.session.compact(customInstructions);
+			return {
+				summary: result.summary,
+				tokensBefore: result.tokensBefore,
+				estimatedTokensAfter: result.estimatedTokensAfter ?? 0,
+				cost: result.usage?.cost?.total ?? 0,
+			};
+		} catch (error) {
+			// pi throws plain Errors here: "Nothing to compact (session too small)" and
+			// "Already compacted" are refusals, not failures (spike plan/spikes/13 §2 fact 4).
+			const message = error instanceof Error ? error.message : String(error);
+			throw new ApiError("conversation_busy", message);
+		}
+	}
+
+	/** spec/09-api.md §8 — the export payload; rendering lives in ./export.ts. */
+	async exportData(
+		principal: Principal,
+		id: string,
+	): Promise<{ conversation: ConversationDetail; messages: UiMessage[] }> {
+		const conversation = await this.get(principal, id);
+		const { messages } = await this.messages(principal, id);
+		return { conversation, messages };
 	}
 
 	async clearQueue(principal: Principal, id: string) {

@@ -6,6 +6,7 @@ import type {
 	ApiErrorCode,
 	AuthFlowView,
 	CommandsResponse,
+	CompactResponse,
 	ConversationDetail,
 	ConversationStatsResponse,
 	ConversationSummary,
@@ -328,6 +329,12 @@ export const api = {
 			attachments?: { uploadId?: string; mimeType?: string; data?: string }[];
 		},
 	) => request<PostMessageResponse>(`/conversations/${id}/messages`, { method: "POST", body }),
+	/** spec/09-api.md §8 — synchronous compaction. */
+	compactConversation: (id: string, customInstructions?: string) =>
+		request<CompactResponse>(`/conversations/${id}/compact`, {
+			method: "POST",
+			body: customInstructions ? { customInstructions } : {},
+		}),
 	abortConversation: (id: string) =>
 		request<AbortResponse>(`/conversations/${id}/abort`, { method: "POST" }),
 	clearQueue: (id: string) =>

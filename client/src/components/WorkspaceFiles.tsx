@@ -1,10 +1,11 @@
 // spec/04-workspaces.md §3/§5 — the read-only file browser, the file preview and the git
 // badge. The tree refetches when a run finishes (`conversation_done` on /api/events), so a
 // file the agent just wrote appears without a page reload (§7.4).
-import type { Workspace } from "@piui/shared";
+import type { GlobalEvent, Workspace } from "@piui/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { type ApiClientError, api } from "../api/client.js";
+import { useGlobalEvents } from "../hooks/useGlobalEvents.js";
 
 export function WorkspaceFiles({ workspace }: { workspace: Workspace }): JSX.Element {
 	const queryClient = useQueryClient();
@@ -28,21 +29,16 @@ export function WorkspaceFiles({ workspace }: { workspace: Workspace }): JSX.Ele
 	});
 
 	// A run just ended: whatever it wrote is on disk now (spec §7.4).
-	useEffect(() => {
-		const source = new EventSource("/api/events");
-		source.onmessage = (event: MessageEvent<string>) => {
-			try {
-				const parsed = JSON.parse(event.data) as { type: string };
-				if (parsed.type === "conversation_done") {
-					void queryClient.invalidateQueries({ queryKey: ["workspace-tree", workspace.id] });
-					void queryClient.invalidateQueries({ queryKey: ["workspace-git", workspace.id] });
-				}
-			} catch {
-				/* ignore malformed frames */
-			}
-		};
-		return () => source.close();
-	}, [queryClient, workspace.id]);
+	useGlobalEvents(
+		useCallback(
+			(event: GlobalEvent) => {
+				if (event.type !== "conversation_done") return;
+				void queryClient.invalidateQueries({ queryKey: ["workspace-tree", workspace.id] });
+				void queryClient.invalidateQueries({ queryKey: ["workspace-git", workspace.id] });
+			},
+			[queryClient, workspace.id],
+		),
+	);
 
 	const segments = dir.split("/").filter(Boolean);
 

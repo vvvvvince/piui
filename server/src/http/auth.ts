@@ -8,6 +8,7 @@ import type { Logger } from "pino";
 import type { AppContext } from "../context.js";
 import { isAdminOnly, requiresStepUp, STEP_UP_WINDOW_MS } from "./authz.js";
 import { ApiError } from "./errors.js";
+import { RouteRateLimiter } from "./rate-limit.js";
 
 declare module "fastify" {
 	interface FastifyRequest {
@@ -222,6 +223,8 @@ export async function registerAuth(app: PiuiFastify, deps: AuthDeps): Promise<vo
 		secure: ctx.config.forceSecureCookie || req.protocol === "https",
 	});
 
+	const routeLimiter = new RouteRateLimiter(() => ctx.clock.nowMs());
+
 	const setSessionCookie = (req: FastifyRequest, reply: FastifyReply, sessionId: string): void => {
 		reply.setCookie(
 			SESSION_COOKIE,
@@ -257,6 +260,10 @@ export async function registerAuth(app: PiuiFastify, deps: AuthDeps): Promise<vo
 		if (isAdminOnly(req.method, req.url)) requireAdmin(req);
 		if (requiresStepUp(req.method, req.url) && !stepUpValidUntil(ctx, sessionId)) {
 			throw new ApiError("step_up_required", "Confirm your password to continue.");
+		}
+		// spec/11-security.md §4 — the per-session route limits, once a session is known.
+		if (!routeLimiter.take(req.method, req.url, sessionId)) {
+			throw new ApiError("rate_limited", "Slow down: too many requests on this route.");
 		}
 	});
 

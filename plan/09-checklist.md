@@ -124,14 +124,15 @@ Rule for every line below: **failing test first**, then code, then refactor, com
 - [x] **Gate:** `05-skills-and-tools` A/B lists
 
 ## M7 — hardening
-- [ ] headers/CSP, audit log, redaction, run caps, subscriber caps
-- [ ] global `/api/events` + live sidebar badges
-- [ ] export md/json/html, compact endpoint + button
-- [ ] UX states, command palette, a11y, light theme
-- [ ] README + `docs/deployment.md` + `docs/adding-a-provider.md`
-- [ ] multi-arch CI, SearXNG profile, Settings → About posture
-- [ ] **Gate:** `11-security` testable items, `10-frontend#4` manual pass, `19-deployment#9`
+- [x] spike S14 (`plan/spikes/13-export-and-compaction.md`) — pi's exporter is unreachable, `compact()` is real
+- [x] headers/CSP, audit log, redaction, run caps, subscriber caps, fastify transport-error mapping
+- [x] global `/api/events` + live sidebar badges (one shared EventSource per tab)
+- [x] export md/json/html, compact endpoint + "Compact now" above 70 %
+- [x] UX states, command palette, a11y (skip link, focus ring, labels), light theme
+- [x] README + `docs/deployment.md` + `docs/adding-a-provider.md`
+- [x] multi-arch CI workflow, SearXNG profile end to end, Settings → About posture
+- [x] **Gate:** `11-security` testable items, `10-frontend#4` manual pass, `19-deployment#9`
 
 ## V1 close
-- [ ] definition of done (`plan/00-plan.md` §4) verified inside the container
-- [ ] `spec-exemptions.ts` reviewed — every entry still justified
+- [x] definition of done (`plan/00-plan.md` §4) verified inside the container
+- [x] `spec-exemptions.ts` reviewed — every entry still justified

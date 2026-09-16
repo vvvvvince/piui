@@ -18,6 +18,9 @@ function stubFetch(health: () => Promise<Response>) {
 				headers: { "Content-Type": "application/json" },
 			});
 		}
+		if (url.startsWith("/api/conversations")) {
+			return Response.json({ items: [], nextCursor: null });
+		}
 		return health();
 	});
 	vi.stubGlobal("fetch", fetchMock);

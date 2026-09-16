@@ -1,5 +1,5 @@
-// spec/15-commands-and-input.md §5 — the three prompt-template sources with counts and a
-// Rescan button. The rest of /settings is M7.
+// spec/15-commands-and-input.md §5 — the prompt-template sources with counts and a Rescan
+// button — plus the About panel of spec/19-deployment.md §5 (the deployment posture).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -8,6 +8,8 @@ import { api } from "../api/client.js";
 export function SettingsPage(): JSX.Element {
 	const queryClient = useQueryClient();
 	const prompts = useQuery({ queryKey: ["prompts"], queryFn: api.prompts });
+	const health = useQuery({ queryKey: ["health"], queryFn: api.health });
+	const meta = useQuery({ queryKey: ["meta"], queryFn: api.meta });
 	const [result, setResult] = useState<string | null>(null);
 	const rescan = useMutation({
 		mutationFn: api.rescanPrompts,
@@ -29,6 +31,47 @@ export function SettingsPage(): JSX.Element {
 					.
 				</p>
 			</header>
+
+			{/* spec/19-deployment.md §5 — posture is reported, never guessed. */}
+			<div className="rounded border border-slate-800 bg-slate-900/40 p-3">
+				<h2 className="text-sm font-semibold">About</h2>
+				<dl data-testid="about-posture" className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+					<dt className="text-slate-400">piui version</dt>
+					<dd>{health.data?.version ?? "…"}</dd>
+					<dt className="text-slate-400">pi version</dt>
+					<dd>{health.data?.piVersion ?? "…"}</dd>
+					<dt className="text-slate-400">container:</dt>
+					<dd>{health.data ? (health.data.container ? "yes" : "no") : "…"}</dd>
+					<dt className="text-slate-400">plaintext acknowledged:</dt>
+					<dd>
+						{health.data ? (health.data.insecureTransportOk ? "yes" : "no") : "…"}
+						<span className="ml-2 text-slate-500">(PIUI_INSECURE_TRANSPORT_OK)</span>
+					</dd>
+					<dt className="text-slate-400">search provider</dt>
+					<dd>
+						{meta.data?.searchProvider.id ?? "…"}
+						{meta.data && !meta.data.searchProvider.configured ? " (not configured)" : ""}
+					</dd>
+					<dt className="text-slate-400">workspace roots</dt>
+					<dd className="font-mono">{(meta.data?.workspaceRoots ?? []).join(", ") || "—"}</dd>
+					<dt className="text-slate-400">run limits</dt>
+					<dd>
+						{meta.data
+							? `${meta.data.limits.maxConcurrentRuns} concurrent · ${meta.data.limits.maxRunMinutes} min · ${meta.data.limits.maxUploadMb} MB uploads`
+							: "…"}
+					</dd>
+				</dl>
+				{health.data?.defaultCredentials && (
+					<p
+						data-testid="about-default-credentials"
+						className="mt-2 rounded border border-amber-800 bg-amber-950/30 p-2 text-xs text-amber-100"
+					>
+						This piui still uses the default <code>test</code>/<code>test</code> login. Change
+						<code> PIUI_USERNAME</code> and <code>PIUI_PASSWORD</code> before publishing the port
+						anywhere — a piui account is shell-equivalent trust.
+					</p>
+				)}
+			</div>
 
 			<div className="rounded border border-slate-800 bg-slate-900/40 p-3">
 				<div className="flex items-center justify-between">

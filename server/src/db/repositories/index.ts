@@ -3,6 +3,7 @@ import type { Db } from "../index.js";
 import { AuthSessionRepository } from "./auth-sessions.js";
 import { ConversationRepository } from "./conversations.js";
 import { ProfileRepository } from "./profiles.js";
+import { ToolSettingsRepository } from "./tools.js";
 import { UserRepository } from "./users.js";
 import { WorkspaceRepository } from "./workspaces.js";
 
@@ -19,6 +20,7 @@ export interface Repositories {
 	profiles: ProfileRepository;
 	workspaces: WorkspaceRepository;
 	conversations: ConversationRepository;
+	tools: ToolSettingsRepository;
 }
 
 export function createRepositories(db: Db, clock: Clock, ids: IdGen): Repositories {
@@ -28,5 +30,6 @@ export function createRepositories(db: Db, clock: Clock, ids: IdGen): Repositori
 		profiles: new ProfileRepository(db, clock, ids),
 		workspaces: new WorkspaceRepository(db, clock, ids),
 		conversations: new ConversationRepository(db, clock, ids),
+		tools: new ToolSettingsRepository(db, clock, ids),
 	};
 }

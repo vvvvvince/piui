@@ -13,6 +13,7 @@ const EXPECTED_TABLES = [
 	"profiles",
 	"schema_migrations",
 	"skills",
+	"tool_settings",
 	"users",
 	"workspaces",
 ];
@@ -45,7 +46,7 @@ describe("database bootstrap", () => {
 				.prepare("SELECT version FROM schema_migrations ORDER BY version")
 				.all()
 				.map((r) => (r as { version: number }).version);
-			expect(versions).toEqual([1, 2]);
+			expect(versions).toEqual([1, 2, 3]);
 		});
 	});
 

@@ -68,6 +68,24 @@ export function truncateOutput(text: string): { output: string; outputTruncated?
 	return { output: `${text.slice(0, TOOL_OUTPUT_LIMIT)}\n…[truncated]`, outputTruncated: true };
 }
 
+export const TOOL_DETAILS_LIMIT = 8 * 1024;
+
+/**
+ * Structured tool details reach the client (the Sources footer reads `web_search` results out
+ * of them, spec/07-chat-mode.md §3). A tool is free to return anything, so anything too big to
+ * belong in an SSE frame is dropped rather than truncated into invalid JSON.
+ */
+export function safeDetails(details: unknown): { details?: unknown } {
+	if (details === undefined || details === null) return {};
+	try {
+		const encoded = JSON.stringify(details);
+		if (encoded === undefined || encoded.length > TOOL_DETAILS_LIMIT) return {};
+		return { details: JSON.parse(encoded) as unknown };
+	} catch {
+		return {};
+	}
+}
+
 export function costOf(usage: PiMessage["usage"]): number {
 	const cost = (usage as { cost?: { total?: number } } | undefined)?.cost;
 	return typeof cost?.total === "number" ? cost.total : 0;
@@ -132,6 +150,7 @@ export function projectTranscript(messages: readonly unknown[], ids: MessageIds)
 			Object.assign(block, {
 				state: message.isError ? "error" : "ok",
 				...truncateOutput(text),
+				...safeDetails(message.details),
 			});
 			continue;
 		}

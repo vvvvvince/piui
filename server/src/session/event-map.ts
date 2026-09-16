@@ -6,6 +6,7 @@ import {
 	costOf,
 	type MessageIds,
 	type PiMessage,
+	safeDetails,
 	truncateOutput,
 } from "./transcript.js";
 
@@ -68,6 +69,9 @@ export class EventProjector {
 				return this.onMessageEnd(event.message as PiMessage);
 			case "tool_execution_start":
 				return this.onToolState(String(event.toolCallId), "running");
+			case "tool_execution_update":
+				// §B.3: a tool may stream progress, so the card says "searching…" not "frozen".
+				return this.onToolProgress(event);
 			case "tool_execution_end":
 				return this.onToolEnd(event);
 			case "queue_update":
@@ -339,10 +343,37 @@ export class EventProjector {
 		];
 	}
 
+	private onToolProgress(event: PiSessionEvent): ProjectedEvent[] {
+		const entry = this.toolBlocks.get(String(event.toolCallId));
+		if (entry?.block.type !== "tool") return [];
+		const partial = event.partialResult as
+			| { content?: { type: string; text?: string }[]; details?: unknown }
+			| undefined;
+		const text = (partial?.content ?? [])
+			.filter((c) => c.type === "text")
+			.map((c) => c.text ?? "")
+			.join("");
+		Object.assign(entry.block, {
+			state: "running",
+			...truncateOutput(text),
+			...safeDetails(partial?.details),
+		});
+		return [
+			{
+				type: "tool_update",
+				messageId: entry.messageId,
+				blockId: entry.block.id,
+				block: snap(entry.block),
+			},
+		];
+	}
+
 	private onToolEnd(event: PiSessionEvent): ProjectedEvent[] {
 		const entry = this.toolBlocks.get(String(event.toolCallId));
 		if (entry?.block.type !== "tool") return [];
-		const result = event.result as { content?: { type: string; text?: string }[] } | undefined;
+		const result = event.result as
+			| { content?: { type: string; text?: string }[]; details?: unknown }
+			| undefined;
 		const text = (result?.content ?? [])
 			.filter((c) => c.type === "text")
 			.map((c) => c.text ?? "")
@@ -350,6 +381,7 @@ export class EventProjector {
 		Object.assign(entry.block, {
 			state: event.isError ? "error" : "ok",
 			...truncateOutput(text),
+			...safeDetails(result?.details),
 		});
 		return [
 			{

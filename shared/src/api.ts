@@ -5,6 +5,7 @@ import type {
 	Principal,
 	SessionMode,
 	ThinkingLevel,
+	ToolCatalogItem,
 	ToolDescriptor,
 } from "./domain.js";
 import type { ConversationRuntimeState, UiMessage } from "./events.js";
@@ -207,6 +208,34 @@ export interface ModelsResponse {
 	items: ModelInfo[];
 	credentialsRevision: number;
 	refresh?: { aborted: boolean; errors: { provider: string; message: string }[] };
+}
+
+// ------------------------------------------------------------------- tools
+// spec/09-api.md §7.
+
+export interface ToolsResponse {
+	items: ToolCatalogItem[];
+	webSearch: { provider: string; configured: boolean };
+}
+
+export interface PatchToolRequest {
+	enabled: boolean;
+}
+
+export interface SearchTestRequest {
+	query: string;
+}
+
+export interface SearchTestResult {
+	title: string;
+	url: string;
+	snippet: string;
+	publishedAt?: string;
+}
+
+export interface SearchTestResponse {
+	provider: string;
+	results: SearchTestResult[];
 }
 
 // ----------------------------------------------------------- conversations

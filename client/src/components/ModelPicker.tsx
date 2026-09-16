@@ -9,24 +9,42 @@ export interface ModelPickerProps {
 	onChange(model: ModelInfo): void;
 }
 
+/**
+ * How many model rows may be in the DOM at once. `GET /api/models` returns every model pi
+ * knows (~1355), and rendering them all made the New-chat dialog's first paint visibly slow.
+ * Filtering server-side would hide the "greyed, no credentials" models the spec asks for
+ * (§07-chat-mode §3), so the list stays complete and only the *rendering* is bounded.
+ */
+export const MODEL_RENDER_LIMIT = 60;
+
 export function ModelPicker({ models, value, onChange }: ModelPickerProps): JSX.Element {
 	const [query, setQuery] = useState("");
-	const groups = useMemo(() => {
+	const { groups, hidden } = useMemo(() => {
+		const needle = query.toLowerCase();
 		const filtered = models.filter((model) =>
-			`${model.provider} ${model.id} ${model.name}`.toLowerCase().includes(query.toLowerCase()),
+			`${model.provider} ${model.id} ${model.name}`.toLowerCase().includes(needle),
 		);
+		// available first, so the slice always contains what the user can actually pick
+		const ordered = [...filtered].sort((a, b) => {
+			const rank = (m: ModelInfo): number => (m.available ? 0 : 1);
+			return rank(a) - rank(b) || a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id);
+		});
+		const shown = ordered.slice(0, MODEL_RENDER_LIMIT);
 		const byProvider = new Map<string, ModelInfo[]>();
-		for (const model of filtered) {
+		for (const model of shown) {
 			const list = byProvider.get(model.provider) ?? [];
 			list.push(model);
 			byProvider.set(model.provider, list);
 		}
-		// available providers first, then alphabetical
-		return [...byProvider.entries()].sort((a, b) => {
-			const aAvailable = a[1].some((m) => m.available) ? 0 : 1;
-			const bAvailable = b[1].some((m) => m.available) ? 0 : 1;
-			return aAvailable - bAvailable || a[0].localeCompare(b[0]);
-		});
+		return {
+			hidden: ordered.length - shown.length,
+			// available providers first, then alphabetical
+			groups: [...byProvider.entries()].sort((a, b) => {
+				const aAvailable = a[1].some((m) => m.available) ? 0 : 1;
+				const bAvailable = b[1].some((m) => m.available) ? 0 : 1;
+				return aAvailable - bAvailable || a[0].localeCompare(b[0]);
+			}),
+		};
 	}, [models, query]);
 
 	const noneAvailable = models.every((model) => !model.available);
@@ -54,7 +72,7 @@ export function ModelPicker({ models, value, onChange }: ModelPickerProps): JSX.
 					<li key={provider}>
 						<p className="px-1 text-[11px] uppercase tracking-wide text-slate-500">{provider}</p>
 						<ul>
-							{items.slice(0, 40).map((model) => {
+							{items.map((model) => {
 								const selected = value?.provider === model.provider && value?.modelId === model.id;
 								return (
 									<li key={`${model.provider}/${model.id}`}>
@@ -80,6 +98,11 @@ export function ModelPicker({ models, value, onChange }: ModelPickerProps): JSX.
 						</ul>
 					</li>
 				))}
+				{hidden > 0 && (
+					<li className="px-1 py-1 text-[11px] text-slate-500">
+						{hidden} more — refine your search
+					</li>
+				)}
 			</ul>
 		</div>
 	);

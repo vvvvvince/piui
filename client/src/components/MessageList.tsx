@@ -15,7 +15,159 @@ function ThinkingBlock({ block }: { block: Extract<UiBlock, { type: "thinking" }
 	);
 }
 
-function ToolCallCard({ block }: { block: Extract<UiBlock, { type: "tool" }> }): JSX.Element {
+type ToolBlock = Extract<UiBlock, { type: "tool" }>;
+
+interface SearchDetails {
+	provider?: string;
+	query?: string;
+	results?: { title?: string; url?: string; snippet?: string }[];
+}
+
+interface FetchDetails {
+	url?: string;
+	finalUrl?: string;
+	status?: number;
+	contentType?: string;
+	chars?: number;
+	title?: string;
+}
+
+const searchDetails = (block: ToolBlock): SearchDetails => (block.details ?? {}) as SearchDetails;
+const fetchDetails = (block: ToolBlock): FetchDetails => (block.details ?? {}) as FetchDetails;
+
+/** Every URL this message's web tools touched, in order, deduplicated (spec/07 §3). */
+export function sourcesOf(message: UiMessage): { url: string; domain: string }[] {
+	const urls: string[] = [];
+	for (const block of message.blocks) {
+		if (block.type !== "tool") continue;
+		if (block.name === "web_search") {
+			for (const result of searchDetails(block).results ?? []) {
+				if (result.url) urls.push(result.url);
+			}
+		} else if (block.name === "web_fetch") {
+			const details = fetchDetails(block);
+			const url = details.finalUrl ?? details.url;
+			if (url) urls.push(url);
+		}
+	}
+	const seen = new Set<string>();
+	const out: { url: string; domain: string }[] = [];
+	for (const url of urls) {
+		if (seen.has(url)) continue;
+		seen.add(url);
+		try {
+			out.push({ url, domain: new URL(url).hostname.replace(/^www\./, "") });
+		} catch {
+			/* a tool returned something that is not a URL: skip it rather than crash the bubble */
+		}
+	}
+	return out;
+}
+
+function SourcesFooter({ message }: { message: UiMessage }): JSX.Element | null {
+	const sources = sourcesOf(message);
+	if (sources.length === 0) return null;
+	return (
+		<ul aria-label="Sources" className="mt-2 flex flex-wrap gap-2 border-t border-slate-800 pt-2">
+			{sources.map((source, index) => (
+				<li key={source.url}>
+					<a
+						href={source.url}
+						target="_blank"
+						rel="noreferrer noopener"
+						title={source.url}
+						className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-300 hover:border-slate-500"
+					>
+						<span className="text-slate-500">{index + 1}</span>
+						<img
+							alt=""
+							aria-hidden="true"
+							width={12}
+							height={12}
+							src={`https://icons.duckduckgo.com/ip3/${source.domain}.ico`}
+							// offline (or a site without a favicon): leave no broken-image box behind
+							onError={(event) => {
+								event.currentTarget.style.display = "none";
+							}}
+						/>
+						{source.domain}
+					</a>
+				</li>
+			))}
+		</ul>
+	);
+}
+
+function WebSearchCard({ block }: { block: ToolBlock }): JSX.Element {
+	const [open, setOpen] = useState(false);
+	const details = searchDetails(block);
+	const query = details.query ?? (block.args as { query?: string } | undefined)?.query ?? "";
+	const results = details.results ?? [];
+	return (
+		<div className="my-1 rounded border border-slate-700 bg-slate-900/60 p-2 text-xs">
+			<button type="button" onClick={() => setOpen(!open)} className="text-left text-slate-300">
+				{open ? "▾" : "▸"} 🔍 Web search · <span className="font-mono">{query}</span>{" "}
+				{block.state === "running" ? (
+					<span className="animate-pulse text-sky-400">searching…</span>
+				) : block.state === "error" ? (
+					<span className="text-rose-400">failed</span>
+				) : (
+					<span className="text-slate-500">{results.length} results</span>
+				)}
+			</button>
+			{results.length > 0 && (
+				<ol className="mt-1 space-y-0.5">
+					{results.map((result, index) => (
+						<li key={result.url ?? index} className="truncate">
+							<a
+								href={result.url}
+								target="_blank"
+								rel="noreferrer noopener"
+								className="text-sky-300 hover:underline"
+							>
+								{result.title || result.url}
+							</a>
+						</li>
+					))}
+				</ol>
+			)}
+			{open && block.output !== undefined && (
+				<pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all text-slate-400">
+					{block.output}
+				</pre>
+			)}
+		</div>
+	);
+}
+
+function WebFetchCard({ block }: { block: ToolBlock }): JSX.Element {
+	const [open, setOpen] = useState(false);
+	const details = fetchDetails(block);
+	const url = details.finalUrl ?? details.url ?? (block.args as { url?: string })?.url ?? "";
+	return (
+		<div className="my-1 rounded border border-slate-700 bg-slate-900/60 p-2 text-xs">
+			<button type="button" onClick={() => setOpen(!open)} className="text-left text-slate-300">
+				{open ? "▾" : "▸"} 📄 Fetch · <span className="font-mono">{url}</span>{" "}
+				{block.state === "running" ? (
+					<span className="animate-pulse text-sky-400">fetching…</span>
+				) : block.state === "error" ? (
+					<span className="text-rose-400">failed</span>
+				) : (
+					<span className="text-slate-500">
+						{details.status ?? ""} · {details.chars ?? block.output?.length ?? 0} chars
+					</span>
+				)}
+			</button>
+			{open && block.output !== undefined && (
+				<pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words text-slate-400">
+					{block.output}
+				</pre>
+			)}
+		</div>
+	);
+}
+
+function ToolCallCard({ block }: { block: ToolBlock }): JSX.Element {
 	const [open, setOpen] = useState(block.state === "running");
 	const colour =
 		block.state === "error"
@@ -51,6 +203,9 @@ function Blocks({ blocks }: { blocks: UiBlock[] }): JSX.Element {
 			{blocks.map((block) => {
 				if (block.type === "text") return <MarkdownView key={block.id} text={block.text} />;
 				if (block.type === "thinking") return <ThinkingBlock key={block.id} block={block} />;
+				// The web tools get their own cards (spec/07-chat-mode.md §3).
+				if (block.name === "web_search") return <WebSearchCard key={block.id} block={block} />;
+				if (block.name === "web_fetch") return <WebFetchCard key={block.id} block={block} />;
 				return <ToolCallCard key={block.id} block={block} />;
 			})}
 		</>
@@ -72,6 +227,7 @@ export function MessageBubble({ message }: { message: UiMessage }): JSX.Element 
 			data-role={message.role}
 		>
 			<Blocks blocks={message.blocks} />
+			{!isUser && <SourcesFooter message={message} />}
 			<footer className="mt-2 flex gap-3 text-[11px] text-slate-500">
 				{message.model && <span>{message.model}</span>}
 				{message.usage && (

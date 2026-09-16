@@ -12,6 +12,7 @@ export function NewConversationDialog({ onClose }: { onClose(): void }): JSX.Ele
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const models = useQuery({ queryKey: ["models"], queryFn: () => api.models() });
+	const meta = useQuery({ queryKey: ["meta"], queryFn: api.meta });
 	const [selected, setSelected] = useState<ModelInfo | null>(null);
 	const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("off");
 	const [webSearch, setWebSearch] = useState(false);
@@ -95,9 +96,13 @@ export function NewConversationDialog({ onClose }: { onClose(): void }): JSX.Ele
 						<input
 							type="checkbox"
 							checked={webSearch}
+							disabled={meta.data ? !meta.data.searchProvider.configured : false}
 							onChange={(event) => setWebSearch(event.target.checked)}
 						/>
-						Web search <span className="text-xs text-slate-500">(tools land in M3)</span>
+						Web search{" "}
+						{meta.data && !meta.data.searchProvider.configured && (
+							<span className="text-xs text-amber-400">(no search provider configured)</span>
+						)}
 					</label>
 				</div>
 				{create.isError && (

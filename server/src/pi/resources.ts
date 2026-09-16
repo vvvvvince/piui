@@ -32,9 +32,16 @@ ${input.webSearch ? WEB_SEARCH_ON : WEB_SEARCH_OFF}
 `;
 }
 
-/** Chat mode has no built-in tools; `web_search`/`web_fetch` arrive as custom tools in M3. */
-export function resolveChatTools(_input: { webSearch: boolean }): string[] {
-	return [];
+/**
+ * Chat mode's tool allowlist (spec/05-skills-and-tools.md §B.4): never a built-in, and the
+ * two web tools only when the toggle is on. The availability policy (is a provider
+ * configured? has an admin disabled the tool?) lives in `tools/registry.ts` and is passed in
+ * as `available`, so this function stays the single place that can *add* a tool to a chat.
+ */
+export function resolveChatTools(input: { webSearch: boolean; available?: string[] }): string[] {
+	if (!input.webSearch) return [];
+	const available = input.available ?? ["web_search", "web_fetch"];
+	return ["web_search", "web_fetch"].filter((name) => available.includes(name));
 }
 
 export interface ResourceLoaderInput {

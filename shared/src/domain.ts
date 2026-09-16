@@ -90,6 +90,11 @@ export interface ToolDescriptor {
 	configurable: boolean;
 }
 
+/** A catalog row: the descriptor plus how many profiles selected it (spec/09-api.md §7). */
+export interface ToolCatalogItem extends ToolDescriptor {
+	usedByProfiles: number;
+}
+
 export interface ConversationSummary {
 	id: string;
 	title: string;

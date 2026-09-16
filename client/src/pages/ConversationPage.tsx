@@ -6,6 +6,7 @@ import { api } from "../api/client.js";
 import { Composer } from "../components/Composer.js";
 import { HotkeysDialog } from "../components/HotkeysDialog.js";
 import { MessageList } from "../components/MessageList.js";
+import { WebSearchToggle } from "../components/WebSearchToggle.js";
 import { useConversationStream } from "../hooks/useConversationStream.js";
 
 const joinQueue = (queue: { steering: string[]; followUp: string[] }): string =>
@@ -32,6 +33,15 @@ export function ConversationPage(): JSX.Element {
 	const send = useMutation({
 		mutationFn: (input: { text: string; streamingBehavior?: "steer" | "followUp" }) =>
 			api.sendMessage(id!, input),
+	});
+
+	// The globe toggle applies from the next prompt and emits a notice (spec/07-chat-mode.md §3).
+	const meta = useQuery({ queryKey: ["meta"], queryFn: api.meta });
+	const setWebSearch = useMutation({
+		mutationFn: (webSearch: boolean) => api.patchConversation(id!, { webSearch }),
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: ["conversation", id] });
+		},
 	});
 
 	const streaming = stream.state.isStreaming;
@@ -112,7 +122,19 @@ export function ConversationPage(): JSX.Element {
 					},
 					onDequeue: async () => joinQueue(await api.clearQueue(id)),
 				}}
-			/>
+			>
+				<WebSearchToggle
+					value={detail.data?.webSearch === true}
+					configured={meta.data?.searchProvider.configured === true}
+					disabled={streaming || setWebSearch.isPending}
+					onChange={(next) => setWebSearch.mutate(next)}
+				/>
+				{detail.data && detail.data.tools.length > 0 && (
+					<span className="text-[11px] text-slate-500">
+						tools: {detail.data.tools.map((tool) => tool.name).join(", ")}
+					</span>
+				)}
+			</Composer>
 			{hotkeysOpen && <HotkeysDialog onClose={() => setHotkeysOpen(false)} />}
 		</div>
 	);

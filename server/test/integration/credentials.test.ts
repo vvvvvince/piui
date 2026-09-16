@@ -294,6 +294,36 @@ describe("providers & credentials", () => {
 		});
 	});
 
+	it("[14-credentials#9.6] the provider list stops calling a deleted credential configured immediately", async () => {
+		await withTestApp(async (t) => {
+			const admin = await adminWithStepUp(t);
+			await t.app.inject({
+				method: "POST",
+				url: "/api/providers/anthropic/auth/start",
+				headers: { ...admin.headers, ...json },
+				payload: { apiKey: FIXTURE_KEY },
+			});
+			await t.app.inject({
+				method: "DELETE",
+				url: "/api/providers/anthropic/auth",
+				headers: admin.headers,
+			});
+
+			// The browser showed a stale "Configured (stored)" row here in M2: pi's auth status
+			// is an asynchronously refreshed snapshot, so the list must cross-check it against
+			// the credential store, which is authoritative.
+			const list = await t.app.inject({
+				method: "GET",
+				url: "/api/providers",
+				headers: admin.headers,
+			});
+			const anthropic = list.json<ProvidersResponse>().items.find((p) => p.id === "anthropic");
+			expect(anthropic?.configured).toBe(false);
+			expect(anthropic?.removable).toBe(false);
+			expect(anthropic?.source).toBeUndefined();
+		});
+	});
+
 	it("[14-credentials#9.8] refuses every write route under PIUI_DISABLE_CREDENTIAL_WRITES, status still works", async () => {
 		await withTestApp(
 			async (t) => {

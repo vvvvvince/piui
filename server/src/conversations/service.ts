@@ -107,7 +107,9 @@ export class ConversationService {
 		const live = this.hub.peek(row.id);
 		return {
 			...this.summary(row),
-			tools: [],
+			// The resolved set is echoed back so the UI shows exactly what the model can do
+			// (spec/05-skills-and-tools.md §B.4, last rule).
+			tools: this.resolvedTools(row),
 			systemPromptPreview: (live?.session.systemPrompt ?? this.systemPromptFor(row)).slice(
 				0,
 				SYSTEM_PROMPT_PREVIEW_LIMIT,
@@ -198,26 +200,27 @@ export class ConversationService {
 				...(body.webSearch === undefined ? {} : { webSearch: body.webSearch }),
 			});
 			// Applies from the next prompt; history is never rewritten (spec/07 §3).
+			// The notice goes into the conversation channel, which outlives the session swap.
 			this.hub.drop(id);
-			if (live) {
-				live.emit({
-					type: "notice",
-					level: "info",
-					text:
-						body.provider || body.modelId
-							? `Switched to ${modelId}`
-							: body.webSearch
-								? "Web search enabled"
+			this.hub.notify(id, {
+				type: "notice",
+				level: "info",
+				text:
+					body.provider || body.modelId
+						? `Switched to ${modelId}`
+						: body.webSearch === true
+							? "Web search enabled"
+							: body.webSearch === false
+								? "Web search disabled"
 								: "Conversation settings updated",
-				});
-			}
+			});
 		}
 		return this.detail(this.ctx.repos.conversations.getOrThrow(principal, id));
 	}
 
 	delete(principal: Principal, id: string): void {
 		const row = this.ctx.repos.conversations.getOrThrow(principal, id);
-		this.hub.drop(id);
+		this.hub.forget(id);
 		this.ctx.repos.conversations.delete(principal, id);
 		if (row.session_path) {
 			try {
@@ -276,6 +279,10 @@ export class ConversationService {
 			sessionsDir: this.ctx.config.sessionsDir,
 			path: row.session_path,
 		});
+		const toolNames = this.resolvedToolNames(row);
+		// `noTools: "all"` would strip custom tools too, so the names *and* the definitions have
+		// to travel together (spike plan/spikes/08).
+		const web = toolNames.length > 0 ? this.services.createWebToolSet() : undefined;
 		const handle = await createSession({
 			config: {
 				conversationId,
@@ -286,10 +293,21 @@ export class ConversationService {
 				agentDir: this.ctx.config.agentDir,
 				modelRuntime: this.services.modelRuntime,
 				systemPrompt: this.systemPromptFor(row),
-				tools: resolveChatTools({ webSearch: row.web_search === 1 }),
+				tools: toolNames,
+				...(web ? { customTools: web.tools } : {}),
 			},
 			sessionManager,
 		});
+		if (web) {
+			// the per-run search budget (§B.3: 10 searches per run) resets when a run starts
+			(
+				handle.session as unknown as {
+					subscribe(listener: (event: { type: string }) => void): () => void;
+				}
+			).subscribe((event) => {
+				if (event.type === "agent_start") web.beginRun();
+			});
+		}
 		const sessionFile = handle.session.sessionFile;
 		if (sessionFile && sessionFile !== row.session_path) {
 			this.ctx.repos.conversations.setSessionPathById(conversationId, sessionFile);
@@ -328,6 +346,17 @@ export class ConversationService {
 	}
 
 	// --------------------------------------------------------------- pieces
+
+	/** spec/05-skills-and-tools.md §B.4 — chat mode's resolved tool names. */
+	private resolvedToolNames(row: ConversationRow): string[] {
+		const resolved = this.services.tools.resolveChat({ webSearch: row.web_search === 1 });
+		return resolveChatTools({ webSearch: row.web_search === 1, available: resolved.toolNames });
+	}
+
+	private resolvedTools(row: ConversationRow) {
+		const names = new Set(this.resolvedToolNames(row));
+		return this.services.tools.list().filter((tool) => names.has(tool.name));
+	}
 
 	private scratchDir(conversationId: string): string {
 		return join(this.ctx.config.paths.scratch, conversationId);

@@ -10,7 +10,12 @@ import {
 	EventProjector,
 	type ProjectedEvent,
 } from "../../src/session/event-map.js";
-import { MessageIds, projectTranscript, TOOL_OUTPUT_LIMIT } from "../../src/session/transcript.js";
+import {
+	MessageIds,
+	projectTranscript,
+	TOOL_DETAILS_LIMIT,
+	TOOL_OUTPUT_LIMIT,
+} from "../../src/session/transcript.js";
 
 const fixtures = join(fileURLToPath(new URL("../fixtures/", import.meta.url)));
 const load = <T>(name: string): T => JSON.parse(readFileSync(join(fixtures, name), "utf8")) as T;
@@ -69,6 +74,34 @@ describe("transcript projection", () => {
 		const block = toolBlock(projectTranscript(huge, new MessageIds())[0]);
 		expect(block.outputTruncated).toBe(true);
 		expect(block.output!.length).toBeLessThan(TOOL_OUTPUT_LIMIT + 50);
+	});
+
+	it("[07-chat-mode#3] carries structured tool details (the Sources footer reads them)", () => {
+		const withDetails = [
+			{
+				role: "assistant",
+				content: [{ type: "toolCall", id: "c1", name: "web_search", arguments: { query: "q" } }],
+				timestamp: 1,
+			},
+			{
+				role: "toolResult",
+				toolCallId: "c1",
+				content: [{ type: "text", text: "1. **A** — s\n   https://a.example" }],
+				details: { provider: "brave", results: [{ title: "A", url: "https://a.example" }] },
+				isError: false,
+				timestamp: 2,
+			},
+		];
+		const block = toolBlock(projectTranscript(withDetails, new MessageIds())[0]);
+		expect(block.details).toEqual({
+			provider: "brave",
+			results: [{ title: "A", url: "https://a.example" }],
+		});
+
+		// a tool free to return anything must not blow up an SSE frame
+		const huge = structuredClone(withDetails);
+		(huge[1] as { details: unknown }).details = { blob: "x".repeat(TOOL_DETAILS_LIMIT + 10) };
+		expect(toolBlock(projectTranscript(huge, new MessageIds())[0]).details).toBeUndefined();
 	});
 
 	it('[02-data-model#4.1] turns stopReason "error" into a role:"error" message', () => {
@@ -142,6 +175,45 @@ describe("event projection", () => {
 			{ type: "queue", steering: ["a"], followUp: ["b"] },
 		]);
 		expect(projector.ingest({ type: "bash_execution_update", delta: "x" })).toEqual([]);
+	});
+
+	it("[05-skills-and-tools#B.3] surfaces tool progress updates so a card is never frozen", () => {
+		const ids = new MessageIds();
+		const projector = new EventProjector({ ids });
+		const message = {
+			role: "assistant",
+			content: [{ type: "toolCall", id: "c1", name: "web_search", arguments: { query: "q" } }],
+			timestamp: 1,
+		};
+		projector.ingest({ type: "message_start", message });
+		projector.ingest({ type: "message_end", message });
+		projector.ingest({ type: "tool_execution_start", toolCallId: "c1" });
+
+		const updates = projector.ingest({
+			type: "tool_execution_update",
+			toolCallId: "c1",
+			partialResult: { content: [{ type: "text", text: "Searching the web…" }], details: {} },
+		});
+		const update = updates[0] as Extract<ProjectedEvent, { type: "tool_update" }>;
+		expect(update.type).toBe("tool_update");
+		expect(update.block.type === "tool" && update.block.state).toBe("running");
+		expect(update.block.type === "tool" && update.block.output).toContain("Searching the web");
+
+		const ends = projector.ingest({
+			type: "tool_execution_end",
+			toolCallId: "c1",
+			isError: false,
+			result: {
+				content: [{ type: "text", text: "1. **A** — s" }],
+				details: { provider: "brave", results: [{ url: "https://a.example" }] },
+			},
+		});
+		const end = ends[0] as Extract<ProjectedEvent, { type: "tool_update" }>;
+		expect(end.block.type === "tool" && end.block.state).toBe("ok");
+		expect(end.block.type === "tool" && end.block.details).toEqual({
+			provider: "brave",
+			results: [{ url: "https://a.example" }],
+		});
 	});
 });
 

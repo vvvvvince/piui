@@ -73,6 +73,26 @@ writes stay visible on the host. Behind a corporate proxy, build with
 `PIUI_PI_AUTH_PATH` and how to set it to `~/.piui/auth.json` to isolate piui's credentials from
 the pi CLI.)*
 
+### Web search (M3)
+
+Chat mode gets `web_search` and `web_fetch` when the composer's globe toggle is on **and** a
+provider is configured:
+
+| Variable | Meaning |
+|---|---|
+| `PIUI_SEARCH_PROVIDER` | `brave` (default), `tavily`, `searxng`, or `none` |
+| `PIUI_SEARCH_API_KEY` | key for `brave` / `tavily` |
+| `PIUI_SEARXNG_URL` | base URL for `searxng` (e.g. the bundled `http://searxng:8080`) |
+| `PIUI_ALLOW_PRIVATE_HTTP_TOOLS` | `1` disarms the SSRF guard so `web_fetch` may reach loopback/private addresses. Off by default. |
+
+`web_fetch` resolves the hostname and refuses loopback, private, link-local, CGNAT and
+unique-local addresses, allows only `http(s)`, re-checks every redirect (max 3), caps the body,
+enforces a 15 s timeout, and reads only text-ish content types. Search results are cached for
+10 minutes and a single run may search at most 10 times.
+
+Status and a *Test search* button live on the **Tools** page, which is also where a built-in
+tool can be disabled globally (admin only).
+
 ## Security & trust model — read before deploying
 
 These statements are required by the spec and are covered by acceptance criteria

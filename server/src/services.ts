@@ -3,12 +3,16 @@
 
 import type { AppContext } from "./context.js";
 import { ConversationService } from "./conversations/service.js";
+import { installedBuiltinToolNames } from "./pi/builtin-tools.js";
 import { CredentialService } from "./pi/credentials.js";
 import type { FakeModelHandle } from "./pi/fake-model.js";
 import { ModelService } from "./pi/model-service.js";
 import { createPiRuntime, type ModelRuntime } from "./pi/runtime.js";
+import { createWebTools, type WebToolSet } from "./pi/tools/web-search.js";
+import { createSearchProvider, type WebSearchProvider } from "./search/providers.js";
 import { GlobalEventBus } from "./session/bus.js";
 import { SessionHub } from "./session/hub.js";
+import { ToolRegistry } from "./tools/registry.js";
 
 export interface Services {
 	modelRuntime: ModelRuntime;
@@ -17,6 +21,11 @@ export interface Services {
 	events: GlobalEventBus;
 	hub: SessionHub;
 	conversations: ConversationService;
+	/** The configured web-search provider (`none` when unset). */
+	search: WebSearchProvider;
+	tools: ToolRegistry;
+	/** One tool set per pi session: the per-run search budget lives in it. */
+	createWebToolSet(): WebToolSet;
 	fakeModel?: FakeModelHandle;
 	dispose(): Promise<void>;
 }
@@ -24,6 +33,17 @@ export interface Services {
 export async function createServices(ctx: AppContext): Promise<Services> {
 	const { runtime, fakeModel } = await createPiRuntime(ctx.config);
 	const events = new GlobalEventBus();
+	const search = createSearchProvider({
+		config: {
+			searchProvider: ctx.config.searchProvider,
+			searchApiKey: ctx.config.searchApiKey,
+			searxngUrl: ctx.config.searxngUrl,
+		},
+		fetch: ctx.fetch,
+		nowMs: () => ctx.clock.nowMs(),
+	});
+	const tools = new ToolRegistry({ repos: ctx.repos, search, logger: ctx.logger });
+	tools.validateAgainstPi(installedBuiltinToolNames());
 	const models = new ModelService({ runtime, nowMs: () => ctx.clock.nowMs() });
 	const credentials = new CredentialService({
 		runtime,
@@ -54,6 +74,14 @@ export async function createServices(ctx: AppContext): Promise<Services> {
 		models,
 		events,
 		hub,
+		search,
+		tools,
+		createWebToolSet: () =>
+			createWebTools({
+				provider: search,
+				fetch: ctx.fetch,
+				allowPrivate: ctx.config.allowPrivateHttpTools,
+			}),
 		// replaced immediately below, once the service can see `services`
 		conversations: undefined as unknown as ConversationService,
 		...(fakeModel ? { fakeModel } : {}),

@@ -63,6 +63,19 @@ describe("deployment artifacts", () => {
 		expect(result.output.toLowerCase()).toContain(".env");
 	});
 
+	// The end-to-end half of 19-deployment#9.10 (pull the image, search for real) is an M7
+	// container check; what is testable offline is that the wiring matches the docs and the
+	// URL the searxng provider actually calls.
+	it("wires the bundled SearXNG to the two documented env vars", () => {
+		expect(compose).toMatch(/searxng:\n(?:.*\n)*?\s+profiles: \["search"\]/);
+		expect(compose).toContain(`PIUI_SEARXNG_URL: $\{PIUI_SEARXNG_URL:-}`.replace("\\", ""));
+		expect(envExample).toContain("docker compose --profile search up -d");
+		expect(envExample).toContain("PIUI_SEARCH_PROVIDER=searxng");
+		// the documented base URL must be the compose service name + port the image listens on
+		expect(envExample).toContain("PIUI_SEARXNG_URL=http://searxng:8080");
+		expect(compose).toContain("SEARXNG_BASE_URL: http://searxng:8080/");
+	});
+
 	it("[19-deployment#9.9] runs as uid 10001, ships no build toolchain and never mounts the docker socket", () => {
 		const runtimeStage = dockerfile.slice(dockerfile.indexOf("AS runtime"));
 		expect(runtimeStage).toMatch(/useradd --uid 10001/);

@@ -21,6 +21,9 @@ import type {
 	ProviderStatus,
 	ProvidersResponse,
 	QueueResponse,
+	SearchTestResponse,
+	ToolCatalogItem,
+	ToolsResponse,
 	VerifyProviderResponse,
 } from "@piui/shared";
 
@@ -138,6 +141,13 @@ export const api = {
 		request<ProviderStatus>(`/providers/${providerId}/auth`, { method: "DELETE" }),
 	verifyProvider: (providerId: string) =>
 		request<VerifyProviderResponse>(`/providers/${providerId}/verify`, { method: "POST" }),
+
+	// ------------------------------------------------------------------ tools
+	tools: () => request<ToolsResponse>("/tools"),
+	patchTool: (name: string, enabled: boolean) =>
+		request<ToolCatalogItem>(`/tools/${name}`, { method: "PATCH", body: { enabled } }),
+	testSearch: (query: string) =>
+		request<SearchTestResponse>("/tools/web_search/test", { method: "POST", body: { query } }),
 
 	// ---------------------------------------------------------- conversations
 	conversations: () =>

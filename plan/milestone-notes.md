@@ -302,3 +302,135 @@ and `repository scoping > keeps workspaces scoped the same way` failed by name (
   wiring are still absent; `/api/events` exists and is used only for `providers_changed`.
 - Auto-title consumes one turn of the fake provider's script, so tests that care about script
   ordering must either pass an explicit `title` or script the extra turn.
+
+---
+
+## M3 — Web search & tool runtime ✅
+
+**Shipped**
+
+- *Spike S10* (`plan/spikes/08-custom-tools.md`) first: `defineTool` shape, the `execute()`
+  contract, and the fact that **`noTools: "all"` disables custom tools too** — pi computes
+  `allowedToolNames = options.tools ?? (noTools === "all" ? [] : undefined)` and applies it to
+  the merged built-in + custom set. Chat with web search on therefore passes
+  `tools: ["web_search","web_fetch"]` *and* `customTools`; with it off it keeps `noTools: "all"`.
+- `server/src/search/providers.ts` — `WebSearchProvider` with `brave` (key in the
+  `X-Subscription-Token` header, `freshness` → `pd|pw|pm|py`), `tavily` (key in the POST body,
+  never in a URL), `searxng` (`/search?format=json`, no key) and a `none` stub; count clamped to
+  1–10 (default 5); LRU cache keyed `provider|query|count|freshness`, TTL 10 min, cap 200;
+  provider errors are scrubbed of key-shaped fragments before they reach a model or a log.
+- `server/src/net/ssrf.ts` — the shared guard: scheme allowlist, literal-address short circuit
+  (no DNS lookup for `127.0.0.1`), DNS resolution with **every** answer checked (one private
+  answer refuses the whole name, which is what makes rebinding useless), v4 + v6 + v4-mapped-v6
+  ranges (loopback, `10/8`, `172.16/12`, `192.168/16`, `169.254/16`, CGNAT, `fc00::/7`,
+  `fe80::/10`, multicast), `redirect: "manual"` with each hop re-checked and capped at 3, body
+  cap streamed (never buffer a hostile gigabyte), content-type allowlist, hard timeout,
+  `PIUI_ALLOW_PRIVATE_HTTP_TOOLS=1` as the documented escape hatch.
+- `server/src/net/html-to-markdown.ts` — dependency-free HTML → Markdown for `web_fetch`.
+- `server/src/pi/tools/web-search.ts` — `web_search` (numbered Markdown list + the
+  "Use web_fetch on a URL to read the full page." line, `details` carrying the results, a
+  progress update so the card says *searching…*, 10 searches per run then an error telling the
+  model to synthesize) and `web_fetch` (15 s, browser-ish UA, ≤3 redirects, Markdown conversion,
+  `…[truncated, N chars omitted]`, `details: { url, finalUrl, status, contentType, chars }`).
+- `server/src/tools/registry.ts` + migration `003_tool_settings.sql` + `ToolSettingsRepository` —
+  the catalog (`builtin_pi` × 8 with the spec's danger flags, `powershell` only on Windows;
+  `builtin_piui` × 3 with `memory_append` marked implicit), `usedByProfiles` from `profile_tools`,
+  global enable/disable, boot validation of the built-in names against the installed pi
+  (`server/src/pi/builtin-tools.ts`), and `resolveChat()` — the one function that decides a chat
+  conversation's tools.
+- Routes `GET /api/tools`, `PATCH /api/tools/:name` (admin-only through the existing matcher),
+  `POST /api/tools/web_search/test` (10/min/session, `503 provider_not_configured`).
+- Chat wiring: `resolveChatTools({ webSearch, available })`, `customTools` per pi session with a
+  per-run search budget reset on `agent_start`, the resolved set echoed back in
+  `ConversationDetail.tools`, and `PATCH` notices that now distinguish
+  *Web search enabled* / *Web search disabled*.
+- Client: web-search-specific tool cards (query + result links; final URL, status, char count),
+  the **Sources** footer (numbered favicon+domain chips built from the tool `details`, so it
+  works even when the model forgets to cite), the composer globe toggle (disabled with a reason
+  when no provider is configured or while streaming), the resolved-tool chip next to it, and a
+  real `/tools` page: provider status, *Test search* with the top-3 results, and the global
+  enable/disable toggles.
+
+**Verified by hand (M3 acceptance + the two open M2 items)**
+
+1. **The M2 sign-out dialog, re-clicked** (open item 1): `/settings/providers` → *Add key* on
+   Anthropic → `Configured (stored)` → *Sign out* → in-app confirmation → *Sign out* →
+   `auth.json` back to `{}` and the row back to *Not configured*. No native modal, no wedged
+   tab. One nit seen and fixed: the row kept the old status for the duration of the background
+   refetch, so the DELETE response now patches the cache directly. ✅
+2. Browser, dev server with a **stub SearXNG on 127.0.0.1:9999** and `PIUI_FAKE_SCRIPT` driving
+   the fake provider: `/tools` shows `searxng · key present yes`, *Test search* returns the
+   three stub results. ✅
+3. New chat with **web search on** → the model calls `web_search` → card with the query and the
+   three result links, **Sources footer** with numbered chips, the answer citing the page
+   (`07-chat-mode#6.3`); a second prompt drives `web_fetch` → card with final URL, `200`,
+   `58 chars`. ✅
+4. Globe toggle → `Web search disabled` divider **on the already-open SSE stream**, tools chip
+   gone, history untouched (`05-skills-and-tools#B.5.2`). ✅
+5. Suite: 220 tests green, offline, ~13 s; lint + strict typecheck clean; production build
+   (`npm run build && NODE_ENV=production node server/dist/index.js`) serves the SPA, the tool
+   catalog and a chat on one port. ✅
+
+**Deviations / decisions**
+
+- *No `@mozilla/readability` + `turndown`* (spec §B.3 suggests them): `web_fetch` output is read
+  by a model, not rendered, and readability needs a DOM. piui ships a ~100-line converter
+  (`net/html-to-markdown.ts`) that drops script/style/comments and keeps headings, lists, links
+  and code. If extraction quality ever matters, swapping it is a one-module change.
+- *`tool_settings` is a new table* (migration 003). `02-data-model.md` has no home for "built-in
+  `bash` is globally disabled" — built-ins have no row anywhere — so the flag lives in a
+  `(name, enabled)` table where **absence means enabled**; the table only ever holds deviations.
+- *`provider_not_configured` now maps to 503*, not 400, because `09-api.md` §7 specifies
+  `503 provider_not_configured` for the search test route and nothing else used the code.
+- *Two layers refuse tools in chat mode.* `ToolRegistry.resolveChat` (policy: toggle, provider
+  configured, globally disabled) and `resolveChatTools` (shape: never a built-in) both have to
+  say yes. The mutation check below shows this is deliberate defense in depth: mutating either
+  alone cannot arm a tool.
+- **`ConversationChannel` (an M2 bug found by an M3 test).** SSE subscribers used to live on the
+  `LiveSession`, which `PATCH /api/conversations/:id` disposes — so the `notice` went nowhere
+  and an attached stream went deaf until the client reconnected, and `seq` restarted at 0. The
+  ring, the sequence and the subscribers now live in a per-conversation channel owned by the hub
+  that outlives session swaps; `hub.drop()` replaces the session, `hub.forget()` (used by delete)
+  drops the channel too.
+- *Tool `details` now reach the client* (`safeDetails`, 8 KB cap, dropped rather than truncated
+  into invalid JSON) and `tool_execution_update` is projected, which is what makes the Sources
+  footer and the live "searching…" card possible.
+- *`PIUI_FAKE_SCRIPT`* (dev only, honoured only under `PIUI_FAKE_MODEL=1`): a JSON file of
+  scripted turns, so a browser session can drive tool calls offline. Remember the auto-title
+  consumes the first turn.
+- *`GET /api/models` stays unfiltered* (open item 2). Server-side `?available=1` would contradict
+  `07-chat-mode` §3, which wants unavailable models listed and greyed with "no credentials"; the
+  visible cost was rendering ~1355 rows, so the picker now renders a bounded slice
+  (`MODEL_RENDER_LIMIT = 60`, available first, "N more — refine your search") while searching the
+  whole catalog. Paginating the endpoint itself is parked for M7.
+- *Favicons in the Sources footer* come from `icons.duckduckgo.com` and hide themselves on error
+  (offline hosts show no broken-image box). `11-security.md` §4's CSP already allows
+  `img-src https:` for exactly this.
+
+**Mutation spot-check (§9.6)** — three mutants, all caught by name:
+
+1. removed the `169.254/16` arm of `isPrivateAddress` ⇒
+   `[11-security#2] classifies loopback, private, link-local and unique-local addresses`,
+   `[11-security#2] blocks a hostname that resolves to a private address` and
+   `[11-security#2] re-checks every redirect hop…` failed (3 failed, 174 passed).
+2. removed `if (!input.webSearch) return { toolNames: [], warnings: [] }` from
+   `ToolRegistry.resolveChat` ⇒ `[05-skills-and-tools#B.4] chat mode resolves zero built-ins,
+   whatever the toggle` failed (1 failed, 177 passed).
+3. removed `if (!input.webSearch) return []` from `resolveChatTools` ⇒
+   `[07-chat-mode#4.1] swaps the web-search block with the toggle and resolves zero tools`
+   failed (1 failed, 177 passed). All reverted. ✅
+
+**Open for M4**
+
+- The dev browser tab wedged twice after long HMR sessions (every request pending while the
+  server answered in 1 ms) — most likely the 6-connection HTTP/1.1 budget with SSE streams held
+  open across hot reloads. A fresh tab always recovered. Worth a proper look in M7 (one shared
+  `EventSource` per tab, or `/api/events` multiplexing) before anyone opens many chat tabs.
+- `web_fetch`'s converter has no `<table>` support and ignores `<article>`-style main-content
+  extraction; fine for M3, revisit if agent mode leans on it.
+- `POST /api/tools/http*` (HTTP tools), the profile-facing half of the catalog
+  (`05-skills-and-tools#B.5.{3,4,5,6}`) and the skills surface stay parked for M6;
+  `19-deployment#9.10` (end-to-end against the bundled SearXNG image) moved to M7 — the compose
+  wiring is asserted offline, running the image is not.
+- `memory_append` is listed in the catalog but not implemented (M5); it is flagged
+  `selectableInProfile: false`, so nothing can select it yet.

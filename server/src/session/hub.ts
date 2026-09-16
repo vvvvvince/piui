@@ -54,25 +54,74 @@ export interface HubDeps {
 	onRunEnd?(conversationId: string, session: HubSession): void;
 }
 
-export class LiveSession {
-	readonly ids = new MessageIds();
-	readonly projector: EventProjector;
+/**
+ * The per-conversation event conduit: sequence, ring buffer and subscribers. It deliberately
+ * outlives the pi session, because changing the model or the web-search toggle **replaces**
+ * the session (spec/07-chat-mode.md §3) and an attached SSE stream must keep working across
+ * that swap — and `Last-Event-ID` must keep meaning the same thing.
+ */
+export class ConversationChannel {
 	private readonly ring: UiEvent[] = [];
 	private ringBytes = 0;
 	private readonly subscribers = new Set<(event: UiEvent) => void>();
+	seq = 0;
+
+	get subscriberCount(): number {
+		return this.subscribers.size;
+	}
+
+	emit(projected: ProjectedEvent): UiEvent {
+		this.seq += 1;
+		const event = { ...projected, seq: this.seq } as UiEvent;
+		this.ring.push(event);
+		this.ringBytes += JSON.stringify(event).length;
+		while (this.ring.length > RING_MAX_EVENTS || this.ringBytes > RING_MAX_BYTES) {
+			const dropped = this.ring.shift();
+			if (!dropped) break;
+			this.ringBytes -= JSON.stringify(dropped).length;
+		}
+		for (const subscriber of [...this.subscribers]) subscriber(event);
+		return event;
+	}
+
+	/** Frames after `since`, or undefined when the ring no longer covers it. */
+	replay(since: number): UiEvent[] | undefined {
+		if (since === this.seq) return [];
+		// A `since` from the future belongs to a previous server process: send a snapshot.
+		if (since > this.seq) return undefined;
+		const first = this.ring[0];
+		if (!first || since < first.seq - 1) return undefined;
+		return this.ring.filter((event) => event.seq > since);
+	}
+
+	subscribe(listener: (event: UiEvent) => void): () => void {
+		this.subscribers.add(listener);
+		return () => {
+			this.subscribers.delete(listener);
+		};
+	}
+}
+
+export class LiveSession {
+	readonly ids = new MessageIds();
+	readonly projector: EventProjector;
 	private readonly unsubscribe: () => void;
 	private flushTimer: NodeJS.Timeout | undefined;
-	seq = 0;
 	lastActivityMs: number;
 
 	constructor(
 		readonly conversationId: string,
 		readonly handle: SessionHandle,
 		private readonly deps: HubDeps,
+		readonly channel: ConversationChannel = new ConversationChannel(),
 	) {
 		this.projector = new EventProjector({ ids: this.ids });
 		this.lastActivityMs = deps.nowMs();
 		this.unsubscribe = handle.session.subscribe((event) => this.ingest(event));
+	}
+
+	get seq(): number {
+		return this.channel.seq;
 	}
 
 	get session(): HubSession {
@@ -80,7 +129,7 @@ export class LiveSession {
 	}
 
 	get subscriberCount(): number {
-		return this.subscribers.size;
+		return this.channel.subscriberCount;
 	}
 
 	get state(): ConversationRuntimeState {
@@ -108,37 +157,21 @@ export class LiveSession {
 		return { type: "snapshot", seq: this.seq, messages: this.messages(), state: this.state };
 	}
 
-	/** Frames after `since`, or undefined when the ring no longer covers it. */
 	replay(since: number): UiEvent[] | undefined {
-		if (since === this.seq) return [];
-		// A `since` from the future belongs to a previous server process: send a snapshot.
-		if (since > this.seq) return undefined;
-		const first = this.ring[0];
-		if (!first || since < first.seq - 1) return undefined;
-		return this.ring.filter((event) => event.seq > since);
+		return this.channel.replay(since);
 	}
 
 	subscribe(listener: (event: UiEvent) => void): () => void {
-		this.subscribers.add(listener);
+		const unsubscribe = this.channel.subscribe(listener);
 		this.lastActivityMs = this.deps.nowMs();
 		return () => {
-			this.subscribers.delete(listener);
+			unsubscribe();
 			this.lastActivityMs = this.deps.nowMs();
 		};
 	}
 
 	emit(projected: ProjectedEvent): UiEvent {
-		this.seq += 1;
-		const event = { ...projected, seq: this.seq } as UiEvent;
-		this.ring.push(event);
-		this.ringBytes += JSON.stringify(event).length;
-		while (this.ring.length > RING_MAX_EVENTS || this.ringBytes > RING_MAX_BYTES) {
-			const dropped = this.ring.shift();
-			if (!dropped) break;
-			this.ringBytes -= JSON.stringify(dropped).length;
-		}
-		for (const subscriber of [...this.subscribers]) subscriber(event);
-		return event;
+		return this.channel.emit(projected);
 	}
 
 	private ingest(event: { type: string; [key: string]: unknown }): void {
@@ -208,16 +241,17 @@ export class LiveSession {
 		this.flushTimer = undefined;
 	}
 
+	/** Disposes the pi session only: the channel (and its SSE subscribers) survives. */
 	dispose(): void {
 		this.stopFlushTimer();
 		this.unsubscribe();
 		this.handle.dispose();
-		this.subscribers.clear();
 	}
 }
 
 export class SessionHub {
 	private readonly sessions = new Map<string, LiveSession>();
+	private readonly channels = new Map<string, ConversationChannel>();
 	private readonly loading = new Map<string, Promise<LiveSession>>();
 	private running = 0;
 
@@ -231,6 +265,20 @@ export class SessionHub {
 		return this.sessions.get(conversationId);
 	}
 
+	/** The conduit for a conversation, created on demand and kept across session swaps. */
+	channel(conversationId: string): ConversationChannel {
+		const existing = this.channels.get(conversationId);
+		if (existing) return existing;
+		const channel = new ConversationChannel();
+		this.channels.set(conversationId, channel);
+		return channel;
+	}
+
+	/** Emit into the conversation's channel whether or not a pi session is loaded. */
+	notify(conversationId: string, event: ProjectedEvent): void {
+		this.channel(conversationId).emit(event);
+	}
+
 	/** Lazily created on first prompt or first SSE attach (spec §4.5). */
 	async ensure(conversationId: string): Promise<LiveSession> {
 		const existing = this.sessions.get(conversationId);
@@ -240,7 +288,7 @@ export class SessionHub {
 
 		const promise = (async () => {
 			const handle = await this.deps.createSession(conversationId);
-			const live = new LiveSession(conversationId, handle, this.deps);
+			const live = new LiveSession(conversationId, handle, this.deps, this.channel(conversationId));
 			this.sessions.set(conversationId, live);
 			this.loading.delete(conversationId);
 			return live;
@@ -316,11 +364,18 @@ export class SessionHub {
 		return evicted;
 	}
 
+	/** Drops the pi session; subscribers stay attached and see the next session's events. */
 	drop(conversationId: string): void {
 		const live = this.sessions.get(conversationId);
 		if (!live) return;
 		live.dispose();
 		this.sessions.delete(conversationId);
+	}
+
+	/** The conversation is gone: drop the session *and* its channel. */
+	forget(conversationId: string): void {
+		this.drop(conversationId);
+		this.channels.delete(conversationId);
 	}
 
 	async disposeAll(): Promise<void> {

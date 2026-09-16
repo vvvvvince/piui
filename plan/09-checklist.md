@@ -71,12 +71,13 @@ Rule for every line below: **failing test first**, then code, then refactor, com
       and `19-deployment#9.3`, which the stub-provider seam made testable early
 
 ## M3 — web search & tool runtime
-- [ ] `WebSearchProvider` (brave + one alternative + `none`)
-- [ ] `web_search` / `web_fetch` with injectable fetch, cache, per-run rate limit
-- [ ] shared SSRF guard + hostile-response tests
-- [ ] `GET /api/tools`, `PATCH /api/tools/:name`, `POST /api/tools/web_search/test`
-- [ ] chat toggle, tool cards, Sources footer, settings panel
-- [ ] **Gate:** `07-chat-mode#6.{2,3}`, `05-skills-and-tools#B.5.{1,2}`
+- [x] `WebSearchProvider` (brave + tavily + searxng + `none`) with the 10 min / 200 entry cache
+- [x] `web_search` / `web_fetch` with injectable fetch, progress updates, per-run rate limit
+- [x] shared SSRF guard + hostile-response tests (literal + DNS, redirect hops, caps)
+- [x] `GET /api/tools`, `PATCH /api/tools/:name` (admin), `POST /api/tools/web_search/test`
+- [x] `ToolRegistry` catalog (+ boot validation against the installed pi) and `resolveChat`
+- [x] chat globe toggle, web tool cards, Sources footer, `/tools` configuration panel
+- [x] **Gate:** `07-chat-mode#6.{2,3}`, `05-skills-and-tools#B.5.{1,2}`
 
 ## M4 — workspaces
 - [ ] path validation (symlink resolution, denylist, roots, traversal) + error codes

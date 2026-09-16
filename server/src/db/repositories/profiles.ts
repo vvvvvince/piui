@@ -139,4 +139,26 @@ export class ProfileRepository extends Repository {
 		this.getForWrite(principal, id);
 		this.db.prepare("DELETE FROM profiles WHERE id = ?").run(id);
 	}
+
+	/** The profile's selected tool names (spec/03-profiles.md §4); read by the tool catalog. */
+	toolNames(principal: Principal, id: string): string[] {
+		this.getForWrite(principal, id);
+		return (
+			this.db
+				.prepare("SELECT tool_name FROM profile_tools WHERE profile_id = ? ORDER BY tool_name")
+				.all(id) as { tool_name: string }[]
+		).map((row) => row.tool_name);
+	}
+
+	setTools(principal: Principal, id: string, names: readonly string[]): void {
+		this.getForWrite(principal, id);
+		const replace = this.db.transaction((toolNames: readonly string[]) => {
+			this.db.prepare("DELETE FROM profile_tools WHERE profile_id = ?").run(id);
+			const insert = this.db.prepare(
+				"INSERT OR IGNORE INTO profile_tools (profile_id, tool_name) VALUES (?, ?)",
+			);
+			for (const name of toolNames) insert.run(id, name);
+		});
+		replace(names);
+	}
 }

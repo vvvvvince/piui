@@ -1,5 +1,10 @@
 // /settings/providers — ProviderTable + CredentialDialog (spec/14-credentials.md §4).
-import type { AuthFlowView, ProviderStatus, VerifyProviderResponse } from "@piui/shared";
+import type {
+	AuthFlowView,
+	ProviderStatus,
+	ProvidersResponse,
+	VerifyProviderResponse,
+} from "@piui/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { type ApiClientError, api } from "../api/client.js";
@@ -272,8 +277,19 @@ export function ProvidersPage(): JSX.Element {
 	});
 	const signOut = useMutation({
 		mutationFn: (id: string) => api.deleteAuth(id),
-		onSuccess: () => {
+		onSuccess: (status) => {
 			setError(null);
+			// Patch the row from the response: a background refetch keeps the *previous* data on
+			// screen while it runs, which made the deleted key look like it was still configured
+			// (seen in the browser, M3).
+			queryClient.setQueryData<ProvidersResponse>(["providers"], (current) =>
+				current
+					? {
+							...current,
+							items: current.items.map((item) => (item.id === status.id ? status : item)),
+						}
+					: current,
+			);
 			void queryClient.invalidateQueries({ queryKey: ["providers"] });
 			void queryClient.invalidateQueries({ queryKey: ["models"] });
 		},

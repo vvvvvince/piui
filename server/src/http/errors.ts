@@ -27,7 +27,8 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
 	immutable_after_start: 409,
 	too_many_runs: 429,
 	rate_limited: 429,
-	provider_not_configured: 400,
+	// spec/09-api.md §7: POST /api/tools/web_search/test answers 503 when unset.
+	provider_not_configured: 503,
 	step_up_required: 403,
 	provider_not_found: 404,
 	provider_ambient_only: 409,

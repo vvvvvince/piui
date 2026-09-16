@@ -24,6 +24,8 @@ export interface Config {
 	readonly searchProvider: SearchProviderId;
 	readonly searchApiKey: string | undefined;
 	readonly searxngUrl: string | undefined;
+	/** PIUI_ALLOW_PRIVATE_HTTP_TOOLS=1 disarms the SSRF guard (spec/05-skills-and-tools.md §B.2). */
+	readonly allowPrivateHttpTools: boolean;
 	readonly maxUploadMb: number;
 	readonly maxConcurrentRuns: number;
 	readonly maxRunMinutes: number;
@@ -32,6 +34,8 @@ export interface Config {
 	readonly defaultCredentials: boolean;
 	readonly forceSecureCookie: boolean;
 	readonly fakeModel: boolean;
+	/** Dev-only: a JSON file of scripted fake-provider turns (PIUI_FAKE_MODEL=1 only). */
+	readonly fakeScriptPath: string | undefined;
 	readonly nodeEnv: string;
 	readonly logLevel: string;
 	readonly clientDist: string;
@@ -167,6 +171,7 @@ export function parseConfig(env: Env = process.env): ParsedConfig {
 		searchProvider: searchProviderRaw,
 		searchApiKey: env.PIUI_SEARCH_API_KEY || undefined,
 		searxngUrl: env.PIUI_SEARXNG_URL || undefined,
+		allowPrivateHttpTools: truthy(env.PIUI_ALLOW_PRIVATE_HTTP_TOOLS),
 		maxUploadMb: num(env, "PIUI_MAX_UPLOAD_MB", 10),
 		maxConcurrentRuns: num(env, "PIUI_MAX_CONCURRENT_RUNS", 4),
 		maxRunMinutes: num(env, "PIUI_MAX_RUN_MINUTES", 30),
@@ -175,6 +180,7 @@ export function parseConfig(env: Env = process.env): ParsedConfig {
 		defaultCredentials,
 		forceSecureCookie: truthy(env.PIUI_FORCE_SECURE_COOKIE),
 		fakeModel: truthy(env.PIUI_FAKE_MODEL),
+		fakeScriptPath: env.PIUI_FAKE_SCRIPT ? resolve(expandHome(env.PIUI_FAKE_SCRIPT)) : undefined,
 		nodeEnv: env.NODE_ENV ?? "development",
 		logLevel: env.PIUI_LOG_LEVEL ?? (env.NODE_ENV === "production" ? "info" : "debug"),
 		clientDist: resolve(env.PIUI_CLIENT_DIST ?? join(process.cwd(), "client", "dist")),

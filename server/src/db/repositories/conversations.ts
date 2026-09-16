@@ -137,6 +137,23 @@ export class ConversationRepository extends Repository {
 		return row.n;
 	}
 
+	/** spec/09-api.md §4 — "usedByConversations" on the profile list. */
+	countUsingProfile(principal: Principal, profileId: string): number {
+		const where = ownWhere(principal);
+		return (
+			this.db
+				.prepare(`SELECT COUNT(*) AS n FROM conversations WHERE ${where.sql} AND profile_id = ?`)
+				.get(...where.params, profileId) as { n: number }
+		).n;
+	}
+
+	/** spec/03-profiles.md §7 — a deleted profile leaves its conversations readable. */
+	detachProfile(profileId: string): number {
+		return this.db
+			.prepare("UPDATE conversations SET profile_id = NULL, updated_at = ? WHERE profile_id = ?")
+			.run(this.clock.nowIso(), profileId).changes;
+	}
+
 	/** Deleting a workspace keeps every transcript: `workspace_id` just becomes NULL (§6). */
 	detachWorkspace(workspaceId: string): number {
 		return this.db
@@ -144,6 +161,25 @@ export class ConversationRepository extends Repository {
 				"UPDATE conversations SET workspace_id = NULL, updated_at = ? WHERE workspace_id = ?",
 			)
 			.run(this.clock.nowIso(), workspaceId).changes;
+	}
+
+	/** Only reachable before a session exists (spec/09-api.md §8, `immutable_after_start`). */
+	setProfileAndWorkspace(
+		principal: Principal,
+		id: string,
+		patch: { profileId?: string; workspaceId?: string },
+	): void {
+		const row = this.getOrThrow(principal, id);
+		this.db
+			.prepare(
+				"UPDATE conversations SET profile_id = ?, workspace_id = ?, updated_at = ? WHERE id = ?",
+			)
+			.run(
+				patch.profileId ?? row.profile_id,
+				patch.workspaceId ?? row.workspace_id,
+				this.clock.nowIso(),
+				id,
+			);
 	}
 
 	setSessionPath(principal: Principal, id: string, sessionPath: string): void {

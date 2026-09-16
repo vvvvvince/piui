@@ -4,7 +4,7 @@ import type { ConversationRuntimeState, UiEvent, UiMessage } from "@piui/shared"
 import { ApiError } from "../http/errors.js";
 import type { GlobalEventBus } from "./bus.js";
 import { EventProjector, type ProjectedEvent } from "./event-map.js";
-import { MessageIds, projectTranscript } from "./transcript.js";
+import { isAbortedMessage, MessageIds, type PiMessage, projectTranscript } from "./transcript.js";
 
 export const RING_MAX_EVENTS = 2000;
 export const RING_MAX_BYTES = 8 * 1024 * 1024;
@@ -51,6 +51,9 @@ export interface HubDeps {
 	/** Domain clock (fake in tests) — drives eviction. */
 	nowMs(): number;
 	maxConcurrentRuns: number;
+	/** spec/08-agent-mode.md §6 — runaway guards, no approval gates (decisions Q3/Q9). */
+	maxRunMinutes: number;
+	maxToolCallsPerRun: number;
 	onRunEnd?(conversationId: string, session: HubSession): void;
 }
 
@@ -107,6 +110,8 @@ export class LiveSession {
 	readonly projector: EventProjector;
 	private readonly unsubscribe: () => void;
 	private flushTimer: NodeJS.Timeout | undefined;
+	private runTimer: NodeJS.Timeout | undefined;
+	private toolCallsThisRun = 0;
 	lastActivityMs: number;
 
 	constructor(
@@ -179,8 +184,18 @@ export class LiveSession {
 		for (const projected of this.projector.ingest(event)) this.emit(projected);
 
 		switch (event.type) {
+			case "tool_execution_start":
+				this.toolCallsThisRun += 1;
+				if (this.toolCallsThisRun > this.deps.maxToolCallsPerRun) {
+					this.tripGuard(
+						`Stopped after ${this.deps.maxToolCallsPerRun} tool calls in one run (PIUI_MAX_TOOL_CALLS). ` +
+							"Send another message to continue.",
+					);
+				}
+				break;
 			case "agent_start":
 			case "turn_start":
+				this.startRunTimer();
 				this.startFlushTimer();
 				this.emit({ type: "state", state: this.state });
 				this.deps.events.emit({
@@ -194,6 +209,7 @@ export class LiveSession {
 				break;
 			}
 			case "agent_settled": {
+				this.stopRunTimer();
 				this.stopFlushTimer();
 				for (const projected of this.projector.flush()) this.emit(projected);
 				this.emitUsage();
@@ -227,6 +243,35 @@ export class LiveSession {
 		});
 	}
 
+	/** A guard tripped: tell the user in the transcript, then stop the run. Never a gate. */
+	private tripGuard(text: string): void {
+		this.stopRunTimer();
+		this.emit({ type: "notice", level: "warning", text });
+		void this.session.abort().catch(() => {
+			/* the run may have settled on its own in the meantime */
+		});
+	}
+
+	private startRunTimer(): void {
+		if (this.runTimer) return;
+		this.toolCallsThisRun = 0;
+		this.runTimer = setTimeout(
+			() =>
+				this.tripGuard(
+					`Stopped after ${this.deps.maxRunMinutes} minutes (PIUI_MAX_RUN_MINUTES). ` +
+						"Send another message to continue.",
+				),
+			Math.max(1, this.deps.maxRunMinutes * 60_000),
+		);
+		this.runTimer.unref?.();
+	}
+
+	private stopRunTimer(): void {
+		if (!this.runTimer) return;
+		clearTimeout(this.runTimer);
+		this.runTimer = undefined;
+	}
+
 	private startFlushTimer(): void {
 		if (this.flushTimer) return;
 		this.flushTimer = setInterval(() => {
@@ -243,6 +288,7 @@ export class LiveSession {
 
 	/** Disposes the pi session only: the channel (and its SSE subscribers) survives. */
 	dispose(): void {
+		this.stopRunTimer();
 		this.stopFlushTimer();
 		this.unsubscribe();
 		this.handle.dispose();
@@ -409,11 +455,11 @@ function contextPercentOf(
 }
 
 function lastRunReason(session: HubSession): "settled" | "aborted" | "error" {
-	const messages = session.messages as { role?: string; stopReason?: string }[];
+	const messages = session.messages as PiMessage[];
 	for (let i = messages.length - 1; i >= 0; i -= 1) {
 		const message = messages[i];
 		if (message?.role !== "assistant") continue;
-		if (message.stopReason === "aborted") return "aborted";
+		if (isAbortedMessage(message)) return "aborted";
 		if (message.stopReason === "error") return "error";
 		return "settled";
 	}

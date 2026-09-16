@@ -86,6 +86,21 @@ export function safeDetails(details: unknown): { details?: unknown } {
 	}
 }
 
+/**
+ * A user-initiated stop is not an error. pi 0.85.1 ends the turn that follows an `abort()`
+ * with `stopReason: "error"` and `errorMessage: "This operation was aborted"`, so both
+ * projection paths route through here rather than painting a red error bubble the user caused
+ * on purpose (spec/07-chat-mode.md §6.6, spec/08-agent-mode.md §4).
+ */
+export function isAbortedMessage(message: PiMessage): boolean {
+	if (message.stopReason === "aborted") return true;
+	return message.stopReason === "error" && /abort/i.test(message.errorMessage ?? "");
+}
+
+export function roleOfAssistant(message: PiMessage): "assistant" | "error" {
+	return message.stopReason === "error" && !isAbortedMessage(message) ? "error" : "assistant";
+}
+
 export function costOf(usage: PiMessage["usage"]): number {
 	const cost = (usage as { cost?: { total?: number } } | undefined)?.cost;
 	return typeof cost?.total === "number" ? cost.total : 0;
@@ -164,11 +179,12 @@ export function projectTranscript(messages: readonly unknown[], ids: MessageIds)
 			if (block.type === "tool") toolBlocks.set(block.toolCallId, block);
 		}
 		const usage = message.usage;
+		const aborted = isAbortedMessage(message);
 		const projected: UiMessage = {
 			id,
-			role: message.stopReason === "error" ? "error" : "assistant",
+			role: roleOfAssistant(message),
 			blocks:
-				message.stopReason === "error" && blocks.length === 0
+				message.stopReason === "error" && !aborted && blocks.length === 0
 					? [
 							{
 								type: "text",
@@ -189,10 +205,10 @@ export function projectTranscript(messages: readonly unknown[], ids: MessageIds)
 					}
 				: {}),
 			...(message.model ? { model: message.model } : {}),
-			...(message.stopReason === "aborted" ? { stopped: true as const } : {}),
+			...(aborted ? { stopped: true as const } : {}),
 			createdAt,
 		};
-		if (message.stopReason === "error" && message.errorMessage && blocks.length > 0) {
+		if (message.stopReason === "error" && !aborted && message.errorMessage && blocks.length > 0) {
 			projected.blocks = [
 				...blocks,
 				{ type: "text", id: `${id}:error`, text: message.errorMessage },

@@ -86,6 +86,10 @@ export interface SkillSummary {
 	path: string;
 	files?: string[];
 	warnings: string[];
+	/** spec/09-api.md §6 — profiles that selected this skill. */
+	usedByProfiles?: number;
+	/** The directory is gone; the row survives so profile references do (§A.3). */
+	missing?: true;
 }
 
 export type ToolKind = "builtin_pi" | "builtin_piui" | "http" | "extension";

@@ -21,11 +21,14 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
 	// spec/09-api.md §5: GET /api/workspaces/:id/file on a binary file.
 	binary_file: 415,
 	skill_invalid: 400,
+	// spec/03-profiles.md §7.
+	agents_md_too_large: 400,
 	tool_name_taken: 409,
 	model_unavailable: 400,
 	// spec/04-workspaces.md §3: prompting into a workspace whose folder is gone.
 	workspace_missing: 409,
-	profile_not_found: 400,
+	// spec/08-agent-mode.md §1 spells this one out as a 404 (§0's list has no status).
+	profile_not_found: 404,
 	conversation_busy: 409,
 	immutable_after_start: 409,
 	too_many_runs: 429,

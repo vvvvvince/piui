@@ -12,6 +12,7 @@ import { ApiError } from "./errors.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerGlobalEventRoutes } from "./routes/events.js";
 import { registerModelRoutes } from "./routes/models.js";
+import { registerProfileRoutes } from "./routes/profiles.js";
 import { registerProviderRoutes } from "./routes/providers.js";
 import { registerToolRoutes } from "./routes/tools.js";
 import { registerWorkspaceRoutes } from "./routes/workspaces.js";
@@ -149,6 +150,7 @@ export async function buildServer(ctx: AppContext, injected?: Services) {
 	await registerGlobalEventRoutes(app, services);
 	await registerToolRoutes(app, ctx, services);
 	await registerWorkspaceRoutes(app, services.workspaces);
+	await registerProfileRoutes(app, services.profiles, services.skills);
 	await registerConversationRoutes(app, services.conversations, services.hub);
 
 	if (ctx.serveClient && existsSync(join(config.clientDist, "index.html"))) {

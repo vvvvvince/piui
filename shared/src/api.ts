@@ -3,7 +3,9 @@ import type {
 	ConversationSummary,
 	ModelInfo,
 	Principal,
+	Profile,
 	SessionMode,
+	SkillSummary,
 	ThinkingLevel,
 	ToolCatalogItem,
 	ToolDescriptor,
@@ -39,6 +41,8 @@ export type ApiErrorCode =
 	| "path_escape"
 	| "binary_file"
 	| "skill_invalid"
+	// spec/03-profiles.md §7
+	| "agents_md_too_large"
 	| "tool_name_taken"
 	| "model_unavailable"
 	| "workspace_missing"
@@ -317,6 +321,59 @@ export interface FsBrowseResponse {
 	dirs: string[];
 }
 
+// --------------------------------------------------------------- profiles
+// spec/09-api.md §4.
+
+/** List rows carry the size instead of the body (§4). */
+export interface ProfileSummary extends Omit<Profile, "agentsMd"> {
+	agentsMdSize: number;
+	usedByConversations: number;
+}
+
+export interface ProfileDetail extends Profile {
+	agentsMdSize: number;
+	usedByConversations: number;
+	/** What this profile can actually do right now (spec/05-skills-and-tools.md §B.4). */
+	resolvedTools: ToolDescriptor[];
+	warnings: string[];
+}
+
+export interface ProfilesResponse {
+	items: ProfileSummary[];
+}
+
+export interface CreateProfileRequest {
+	name: string;
+	description?: string;
+	agentsMd?: string;
+	skillIds?: string[];
+	toolNames?: string[];
+	memory?: { enabled: boolean; path?: string | null };
+	defaults?: { provider?: string; modelId?: string; thinkingLevel?: ThinkingLevel };
+}
+
+export type PatchProfileRequest = Partial<CreateProfileRequest>;
+
+export interface DeleteProfileResponse {
+	affectedConversations: number;
+}
+
+/** GET /api/profiles/:id/memory — Phase 0 also reports what is injected (spec/17 §6.4). */
+export interface ProfileMemoryResponse {
+	path: string;
+	enabled: boolean;
+	sizeBytes: number;
+	modifiedAt: string | null;
+	content: string;
+	truncated: boolean;
+	injectedBytes: number;
+	noteCount: number;
+}
+
+export interface SkillsResponse {
+	items: SkillSummary[];
+}
+
 // ----------------------------------------------------------- conversations
 
 export interface ConversationDetail extends ConversationSummary {
@@ -347,6 +404,9 @@ export interface CreateConversationResponse {
 export interface PatchConversationRequest {
 	title?: string;
 	archived?: boolean;
+	/** Rejected with `409 immutable_after_start` once the session exists (spec/09-api.md §8). */
+	profileId?: string;
+	workspaceId?: string;
 	provider?: string;
 	modelId?: string;
 	thinkingLevel?: ThinkingLevel;

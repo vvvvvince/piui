@@ -3,7 +3,7 @@
 // reviewed at every milestone gate.
 
 /** Milestones whose acceptance lists are enforced by test/spec-coverage.test.ts. */
-export const COMPLETED_MILESTONES = ["M0", "M1", "M2", "M3", "M4"] as const;
+export const COMPLETED_MILESTONES = ["M0", "M1", "M2", "M3", "M4", "M5"] as const;
 
 /** Permanently exempt: manual, environmental, or process criteria. */
 export const exemptions: Record<string, string> = {

@@ -167,6 +167,175 @@ function WebFetchCard({ block }: { block: ToolBlock }): JSX.Element {
 	);
 }
 
+/** A collapsible card with a one-line summary — the shape every agent tool card shares. */
+function Card({
+	block,
+	icon,
+	title,
+	summary,
+	children,
+	openByDefault,
+}: {
+	block: ToolBlock;
+	icon: string;
+	title: string;
+	summary?: string;
+	children?: React.ReactNode;
+	openByDefault?: boolean;
+}): JSX.Element {
+	// Successful cards collapse, errors stay open (spec/08-agent-mode.md §2 collapse policy).
+	const [open, setOpen] = useState(openByDefault ?? block.state === "error");
+	const colour =
+		block.state === "error"
+			? "border-rose-800"
+			: block.state === "ok"
+				? "border-emerald-900"
+				: "border-slate-700";
+	return (
+		<div className={`my-1 rounded border ${colour} bg-slate-900/60 p-2 text-xs`}>
+			<button type="button" onClick={() => setOpen(!open)} className="text-left text-slate-300">
+				{open ? "▾" : "▸"} {icon} <span className="font-mono">{title}</span>{" "}
+				{block.state === "running" ? (
+					<span className="animate-pulse text-sky-400">running…</span>
+				) : block.state === "pending" ? (
+					<span className="text-slate-500">starting…</span>
+				) : block.state === "error" ? (
+					<span className="text-rose-400">failed</span>
+				) : (
+					<span className="text-slate-500">{summary ?? "done"}</span>
+				)}
+			</button>
+			{open && <div className="mt-1 space-y-1">{children}</div>}
+		</div>
+	);
+}
+
+function Output({ block }: { block: ToolBlock }): JSX.Element | null {
+	if (block.output === undefined) return null;
+	return (
+		<pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all text-slate-300">
+			{block.output}
+			{block.outputTruncated ? "\n…output truncated" : ""}
+		</pre>
+	);
+}
+
+const argOf = (block: ToolBlock, key: string): string | undefined => {
+	const value = (block.args as Record<string, unknown> | undefined)?.[key];
+	return typeof value === "string" ? value : typeof value === "number" ? String(value) : undefined;
+};
+
+/** `edit` — pi hands us a unified patch and a display diff (spike plan/spikes/09). */
+function EditCard({ block }: { block: ToolBlock }): JSX.Element {
+	const details = (block.details ?? {}) as { diff?: string; patch?: string };
+	const diff = details.diff ?? details.patch ?? "";
+	return (
+		<Card block={block} icon="E" title={argOf(block, "path") ?? "edit"} summary="edited">
+			<pre className="max-h-72 overflow-auto rounded bg-slate-950 p-2 font-mono">
+				{diff.split("\n").map((line, index) => (
+					<div
+						// biome-ignore lint/suspicious/noArrayIndexKey: diff lines have no other identity
+						key={index}
+						className={
+							line.startsWith("+")
+								? "text-emerald-400"
+								: line.startsWith("-")
+									? "text-rose-400"
+									: "text-slate-400"
+						}
+					>
+						{line}
+					</div>
+				))}
+			</pre>
+			<Output block={block} />
+		</Card>
+	);
+}
+
+/** `bash` — command + streaming stdout; pi reports failure through the state, not an exit code. */
+function BashCard({ block }: { block: ToolBlock }): JSX.Element {
+	const command = argOf(block, "command") ?? "";
+	return (
+		<Card
+			block={block}
+			icon="$"
+			title={command}
+			summary="exited 0"
+			openByDefault={block.state !== "ok"}
+		>
+			<div className="flex items-center gap-2">
+				<code className="flex-1 rounded bg-slate-950 px-2 py-1">{command}</code>
+				<button
+					type="button"
+					className="rounded border border-slate-700 px-1"
+					onClick={() => void navigator.clipboard?.writeText(command)}
+				>
+					copy
+				</button>
+			</div>
+			<pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-black p-2 text-slate-200">
+				{block.output ?? ""}
+			</pre>
+		</Card>
+	);
+}
+
+function FileCard({ block }: { block: ToolBlock }): JSX.Element {
+	const path = argOf(block, "path") ?? ".";
+	if (block.name === "write") {
+		const content = (block.args as { content?: string } | undefined)?.content ?? "";
+		return (
+			<Card block={block} icon="W" title={path} summary={`${content.length} B written`}>
+				<pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-2">
+					{content}
+				</pre>
+			</Card>
+		);
+	}
+	if (block.name === "read") {
+		const offset = Number(argOf(block, "offset") ?? Number.NaN);
+		const limit = Number(argOf(block, "limit") ?? Number.NaN);
+		const range =
+			Number.isFinite(offset) && Number.isFinite(limit)
+				? `lines ${offset}–${offset + limit - 1}`
+				: "whole file";
+		return (
+			<Card block={block} icon="R" title={path} summary={range}>
+				<p className="text-slate-500">{range}</p>
+				<Output block={block} />
+			</Card>
+		);
+	}
+	// grep / find / ls: a compact result list
+	const lines = (block.output ?? "").split("\n").filter(Boolean);
+	return (
+		<Card
+			block={block}
+			icon="?"
+			title={argOf(block, "pattern") ?? path}
+			summary={`${lines.length} results`}
+		>
+			<ul className="max-h-64 overflow-auto font-mono text-slate-300">
+				{lines.slice(0, 200).map((line) => (
+					<li key={line} className="truncate">
+						{line}
+					</li>
+				))}
+			</ul>
+		</Card>
+	);
+}
+
+function MemoryCard({ block }: { block: ToolBlock }): JSX.Element {
+	const note = (block.args as { note?: string } | undefined)?.note ?? "";
+	return (
+		<div className="my-1 rounded border border-slate-800 bg-slate-900/40 px-2 py-1 text-xs text-slate-300">
+			{block.output?.startsWith("Remembered") ? block.output : `Remembered: ${note}`}
+		</div>
+	);
+}
+
 function ToolCallCard({ block }: { block: ToolBlock }): JSX.Element {
 	const [open, setOpen] = useState(block.state === "running");
 	const colour =
@@ -206,6 +375,13 @@ function Blocks({ blocks }: { blocks: UiBlock[] }): JSX.Element {
 				// The web tools get their own cards (spec/07-chat-mode.md §3).
 				if (block.name === "web_search") return <WebSearchCard key={block.id} block={block} />;
 				if (block.name === "web_fetch") return <WebFetchCard key={block.id} block={block} />;
+				// Agent-mode renderers (spec/08-agent-mode.md §2).
+				if (block.name === "edit") return <EditCard key={block.id} block={block} />;
+				if (block.name === "bash" || block.name === "powershell")
+					return <BashCard key={block.id} block={block} />;
+				if (["read", "write", "grep", "find", "ls"].includes(block.name))
+					return <FileCard key={block.id} block={block} />;
+				if (block.name === "memory_append") return <MemoryCard key={block.id} block={block} />;
 				return <ToolCallCard key={block.id} block={block} />;
 			})}
 		</>

@@ -18,11 +18,14 @@ export interface ResolvedSessionConfig {
 	cwd: string;
 	agentDir: string;
 	modelRuntime: ModelRuntime;
-	systemPrompt: string;
+	/** Chat mode only — agent mode keeps pi's default prompt (spec/03-profiles.md §2). */
+	systemPrompt?: string;
 	/** Resolved built-in tool allowlist; empty in chat mode. */
 	tools: string[];
 	customTools?: unknown[];
 	agentsFiles?: { path: string; content: string }[];
+	/** Resolved pi `Skill` objects; agent mode only (spec/03-profiles.md §3). */
+	skills?: unknown[];
 	steeringMode?: "all" | "one-at-a-time";
 	followUpMode?: "all" | "one-at-a-time";
 }
@@ -71,8 +74,9 @@ export async function createSession(input: CreateSessionInput): Promise<AgentRun
 		cwd: config.cwd,
 		agentDir: config.agentDir,
 		settingsManager,
-		systemPrompt: config.systemPrompt,
+		...(config.systemPrompt === undefined ? {} : { systemPrompt: config.systemPrompt }),
 		...(config.agentsFiles ? { agentsFiles: config.agentsFiles } : {}),
+		...(config.skills ? { skills: config.skills } : {}),
 	});
 
 	const { session } = await createAgentSession({

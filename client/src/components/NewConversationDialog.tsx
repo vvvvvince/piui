@@ -1,5 +1,5 @@
-// "New chat" (spec/10-frontend.md §2; the Agent tab lands in M5).
-import type { ModelInfo, ThinkingLevel } from "@piui/shared";
+// "New chat" / "New agent run" (spec/10-frontend.md §2, spec/08-agent-mode.md §1).
+import type { ModelInfo, SessionMode, ThinkingLevel } from "@piui/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -16,6 +16,11 @@ export function NewConversationDialog({ onClose }: { onClose(): void }): JSX.Ele
 	const [selected, setSelected] = useState<ModelInfo | null>(null);
 	const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("off");
 	const [webSearch, setWebSearch] = useState(false);
+	const [mode, setMode] = useState<SessionMode>("chat");
+	const [profileId, setProfileId] = useState("");
+	const [workspaceId, setWorkspaceId] = useState("");
+	const profiles = useQuery({ queryKey: ["profiles"], queryFn: api.profiles });
+	const workspaces = useQuery({ queryKey: ["workspaces"], queryFn: api.workspaces });
 
 	const remembered = (() => {
 		try {
@@ -44,11 +49,11 @@ export function NewConversationDialog({ onClose }: { onClose(): void }): JSX.Ele
 				JSON.stringify({ provider: current.provider, modelId: current.id }),
 			);
 			return api.createConversation({
-				mode: "chat",
+				mode,
 				provider: current.provider,
 				modelId: current.id,
 				thinkingLevel,
-				webSearch,
+				...(mode === "agent" ? { profileId, workspaceId } : { webSearch }),
 				timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 			});
 		},
@@ -66,7 +71,63 @@ export function NewConversationDialog({ onClose }: { onClose(): void }): JSX.Ele
 				aria-label="New chat"
 				className="w-full max-w-lg rounded-lg border border-slate-700 bg-slate-900 p-4 shadow-xl"
 			>
-				<h2 className="mb-3 text-lg font-semibold">New chat</h2>
+				<h2 className="mb-3 text-lg font-semibold">
+					{mode === "agent" ? "New agent run" : "New chat"}
+				</h2>
+				<div role="tablist" className="mb-3 flex gap-2 text-sm">
+					{(["chat", "agent"] as SessionMode[]).map((name) => (
+						<button
+							key={name}
+							role="tab"
+							type="button"
+							aria-selected={mode === name}
+							className={`rounded px-2 py-1 capitalize ${
+								mode === name ? "bg-slate-800 text-slate-100" : "text-slate-400"
+							}`}
+							onClick={() => setMode(name)}
+						>
+							{name}
+						</button>
+					))}
+				</div>
+				{mode === "agent" && (
+					<div className="mb-3 grid gap-2 text-sm">
+						<label className="grid gap-1">
+							Profile
+							<select
+								className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
+								value={profileId}
+								onChange={(event) => setProfileId(event.target.value)}
+							>
+								<option value="">Pick a profile…</option>
+								{profiles.data?.items.map((profile) => (
+									<option key={profile.id} value={profile.id}>
+										{profile.name} ({profile.toolNames.length} tools)
+									</option>
+								))}
+							</select>
+						</label>
+						<label className="grid gap-1">
+							Workspace
+							<select
+								className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
+								value={workspaceId}
+								onChange={(event) => setWorkspaceId(event.target.value)}
+							>
+								<option value="">Pick a workspace…</option>
+								{workspaces.data?.items.map((workspace) => (
+									<option
+										key={workspace.id}
+										value={workspace.id}
+										disabled={!workspace.status.exists}
+									>
+										{workspace.name} {workspace.status.exists ? "" : "(missing)"}
+									</option>
+								))}
+							</select>
+						</label>
+					</div>
+				)}
 				{models.isPending && <p className="text-sm text-slate-400">Loading models…</p>}
 				{models.data && (
 					<ModelPicker
@@ -92,7 +153,7 @@ export function NewConversationDialog({ onClose }: { onClose(): void }): JSX.Ele
 							</select>
 						</label>
 					)}
-					<label className="flex items-center gap-2">
+					<label className={`flex items-center gap-2 ${mode === "agent" ? "hidden" : ""}`}>
 						<input
 							type="checkbox"
 							checked={webSearch}
@@ -115,10 +176,14 @@ export function NewConversationDialog({ onClose }: { onClose(): void }): JSX.Ele
 					<button
 						type="button"
 						className="rounded bg-sky-700 px-3 py-1.5 text-sm font-medium disabled:opacity-40"
-						disabled={!current || create.isPending}
+						disabled={
+							!current ||
+							create.isPending ||
+							(mode === "agent" && (profileId === "" || workspaceId === ""))
+						}
 						onClick={() => create.mutate()}
 					>
-						Start chat
+						{mode === "agent" ? "Start agent run" : "Start chat"}
 					</button>
 				</div>
 			</div>

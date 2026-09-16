@@ -69,7 +69,7 @@ export async function registerConversationRoutes(
 
 	app.get<{ Params: { id: string } }>(
 		"/api/conversations/:id",
-		async (req): Promise<ConversationDetail> => service.get(req.principal!, req.params.id),
+		async (req): Promise<ConversationDetail> => await service.get(req.principal!, req.params.id),
 	);
 
 	app.get<{ Params: { id: string } }>(
@@ -91,6 +91,9 @@ export async function registerConversationRoutes(
 						modelId: { type: "string" },
 						thinkingLevel: { type: "string", enum: THINKING_LEVELS },
 						webSearch: { type: "boolean" },
+						// Accepted so the domain can answer `409 immutable_after_start` (spec/09-api.md §8).
+						profileId: { type: "string" },
+						workspaceId: { type: "string" },
 					},
 				},
 			},
@@ -153,7 +156,7 @@ export async function registerConversationRoutes(
 		"/api/conversations/:id/events",
 		async (req, reply) => {
 			// Authorization first: an invisible conversation must 404 before the stream opens.
-			service.get(req.principal!, req.params.id);
+			await service.get(req.principal!, req.params.id);
 			const live = await hub.ensure(req.params.id);
 
 			const channel = openSse(req, reply);

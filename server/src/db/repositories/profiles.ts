@@ -53,6 +53,31 @@ export class ProfileRepository extends Repository {
 		return row;
 	}
 
+	/** Unscoped read for the session factory and the resolution pipeline. */
+	getById(id: string): ProfileRow | undefined {
+		return this.db.prepare("SELECT * FROM profiles WHERE id = ?").get(id) as ProfileRow | undefined;
+	}
+
+	findByName(name: string): ProfileRow | undefined {
+		return this.db.prepare("SELECT * FROM profiles WHERE name = ?").get(name) as
+			| ProfileRow
+			| undefined;
+	}
+
+	/** Seeding decides on this (spec/03-profiles.md §1: "if the table is empty"). */
+	count(): number {
+		return (this.db.prepare("SELECT COUNT(*) AS n FROM profiles").get() as { n: number }).n;
+	}
+
+	/** Unscoped tool names — resolution runs without a request principal. */
+	toolNamesById(id: string): string[] {
+		return (
+			this.db
+				.prepare("SELECT tool_name FROM profile_tools WHERE profile_id = ? ORDER BY rowid")
+				.all(id) as { tool_name: string }[]
+		).map((row) => row.tool_name);
+	}
+
 	getForWrite(principal: Principal, id: string): ProfileRow {
 		const row = this.get(principal, id);
 		if (!row) throw new NotFoundError(`profile ${id} not found`);
@@ -145,7 +170,7 @@ export class ProfileRepository extends Repository {
 		this.getForWrite(principal, id);
 		return (
 			this.db
-				.prepare("SELECT tool_name FROM profile_tools WHERE profile_id = ? ORDER BY tool_name")
+				.prepare("SELECT tool_name FROM profile_tools WHERE profile_id = ? ORDER BY rowid")
 				.all(id) as { tool_name: string }[]
 		).map((row) => row.tool_name);
 	}

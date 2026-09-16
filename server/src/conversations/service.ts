@@ -17,6 +17,8 @@ import { ApiError } from "../http/errors.js";
 import { createSession, openSessionManager } from "../pi/agent-runner.js";
 import { buildChatSystemPrompt, resolveChatTools } from "../pi/resources.js";
 import { fallbackTitle, generateTitle } from "../pi/title.js";
+import { createMemoryTool } from "../pi/tools/memory.js";
+import type { ResolvedProfile } from "../profiles/service.js";
 import type { Services } from "../services.js";
 import type { SessionHandle, SessionHub } from "../session/hub.js";
 import { projectTranscript } from "../session/transcript.js";
@@ -36,13 +38,17 @@ export class ConversationService {
 		principal: Principal,
 		body: CreateConversationRequest,
 	): Promise<{ conversation: ConversationDetail; warnings: string[] }> {
-		if (body.mode !== "chat") {
-			throw new ApiError("validation_error", "Agent mode arrives in M5.");
-		}
-		if (body.profileId || body.workspaceId) {
+		if (body.mode === "chat" && (body.profileId || body.workspaceId)) {
 			throw new ApiError(
 				"validation_error",
 				"Chat mode has no profile and no workspace (spec/07-chat-mode.md §1).",
+			);
+		}
+		// spec/08-agent-mode.md §1: both are required, and both must resolve.
+		if (body.mode === "agent" && (!body.profileId || !body.workspaceId)) {
+			throw new ApiError(
+				"validation_error",
+				"An agent conversation needs a profile and a workspace.",
 			);
 		}
 		const model = this.services.models.getModel(body.provider, body.modelId);
@@ -59,17 +65,37 @@ export class ConversationService {
 			);
 		}
 
+		let thinkingLevel = body.thinkingLevel;
+		if (body.mode === "agent") {
+			const profile = this.ctx.repos.profiles.get(principal, body.profileId!);
+			if (!profile) throw new ApiError("profile_not_found", `No profile ${body.profileId}.`);
+			if (!this.ctx.repos.workspaces.get(principal, body.workspaceId!)) {
+				throw new ApiError("not_found", `No workspace ${body.workspaceId}.`);
+			}
+			// The M4 seam: the folder must still be there before a session is built (§1).
+			this.services.workspaces.requireUsable(body.workspaceId!);
+			// conversation request > profile default > "off" (§1).
+			thinkingLevel = body.thinkingLevel ?? (profile.default_thinking as ThinkingLevel) ?? "off";
+			warnings.push(...this.services.profiles.resolve(profile.id).warnings);
+		}
+
 		const row = this.ctx.repos.conversations.create(principal, {
-			mode: "chat",
+			mode: body.mode,
 			provider: body.provider,
 			modelId: body.modelId,
-			...(body.thinkingLevel ? { thinkingLevel: body.thinkingLevel } : {}),
+			...(thinkingLevel ? { thinkingLevel } : {}),
+			...(body.mode === "agent"
+				? { profileId: body.profileId, workspaceId: body.workspaceId }
+				: {}),
 			webSearch: body.webSearch === true,
 			...(body.title ? { title: body.title } : {}),
 			timezone: body.timezone ?? null,
 		});
 
-		const conversation = this.detail(row);
+		// Agent mode builds the session eagerly so `systemPromptPreview` is the *real* composed
+		// prompt (spec/09-api.md §8) rather than a guess.
+		if (body.mode === "agent") await this.hub.ensure(row.id);
+		const conversation = this.detail(this.ctx.repos.conversations.getOrThrow(principal, row.id));
 		if (body.initialMessage) {
 			await this.prompt(principal, row.id, body.initialMessage);
 		}
@@ -87,10 +113,18 @@ export class ConversationService {
 
 	summary(row: ConversationRow): ConversationSummary {
 		const live = this.hub.peek(row.id);
+		const profile = row.profile_id ? this.ctx.repos.profiles.getById(row.profile_id) : undefined;
+		const workspace = row.workspace_id
+			? this.ctx.repos.workspaces.getById(row.workspace_id)
+			: undefined;
 		return {
 			id: row.id,
 			title: row.title,
 			mode: row.mode as "chat" | "agent",
+			...(profile ? { profile: { id: profile.id, name: profile.name } } : {}),
+			...(workspace
+				? { workspace: { id: workspace.id, name: workspace.name, path: workspace.path } }
+				: {}),
 			model: { provider: row.provider, modelId: row.model_id },
 			thinkingLevel: row.thinking_level as ThinkingLevel,
 			webSearch: row.web_search === 1,
@@ -124,7 +158,17 @@ export class ConversationService {
 		};
 	}
 
-	get(principal: Principal, id: string): ConversationDetail {
+	async get(principal: Principal, id: string): Promise<ConversationDetail> {
+		const row = this.ctx.repos.conversations.getOrThrow(principal, id);
+		// An agent conversation's prompt can only be read off a real session; a broken workspace
+		// must still render the page, so a failure here falls back to the offline preview (§8.7).
+		if (row.mode === "agent" && !this.hub.peek(id)) {
+			try {
+				await this.hub.ensure(id);
+			} catch {
+				/* the workspace or the profile is gone: detail() degrades gracefully */
+			}
+		}
 		return this.detail(this.ctx.repos.conversations.getOrThrow(principal, id));
 	}
 
@@ -173,6 +217,27 @@ export class ConversationService {
 	patch(principal: Principal, id: string, body: PatchConversationRequest): ConversationDetail {
 		const row = this.ctx.repos.conversations.getOrThrow(principal, id);
 		const live = this.hub.peek(id);
+		// spec/09-api.md §8 — the guard lives in the domain, not in the route, so a future entry
+		// point inherits it (mirrors M4's `requireUsable` decision).
+		const movesProfileOrWorkspace =
+			(body.profileId !== undefined && body.profileId !== row.profile_id) ||
+			(body.workspaceId !== undefined && body.workspaceId !== row.workspace_id);
+		if (movesProfileOrWorkspace && (row.session_path || live)) {
+			throw new ApiError(
+				"immutable_after_start",
+				"This conversation has already started; its profile and workspace are fixed.",
+			);
+		}
+		if (movesProfileOrWorkspace) {
+			if (body.profileId !== undefined && !this.ctx.repos.profiles.get(principal, body.profileId)) {
+				throw new ApiError("profile_not_found", `No profile ${body.profileId}.`);
+			}
+			if (body.workspaceId !== undefined) this.services.workspaces.requireUsable(body.workspaceId);
+			this.ctx.repos.conversations.setProfileAndWorkspace(principal, id, {
+				...(body.profileId === undefined ? {} : { profileId: body.profileId }),
+				...(body.workspaceId === undefined ? {} : { workspaceId: body.workspaceId }),
+			});
+		}
 		const touchesModel =
 			body.provider !== undefined ||
 			body.modelId !== undefined ||
@@ -243,6 +308,14 @@ export class ConversationService {
 		// spec/04-workspaces.md §§3,6 — a workspace whose folder vanished blocks new prompts with a
 		// clear 409, never a 500 from a failed cwd. Agent mode (M5) reuses the same guard.
 		if (row.workspace_id) this.services.workspaces.requireUsable(row.workspace_id);
+		// spec/03-profiles.md §7: a deleted profile leaves the transcript readable but refuses new
+		// prompts, with a message that says what happened.
+		if (row.mode === "agent" && !row.profile_id) {
+			throw new ApiError(
+				"profile_not_found",
+				"This conversation's profile was deleted, so it can no longer run. Start a new conversation.",
+			);
+		}
 		const queuedAs = await this.hub.prompt(id, text, streamingBehavior);
 		if (row.title_locked === 0 && row.title === "") {
 			void this.autoTitle(row, text);
@@ -274,30 +347,43 @@ export class ConversationService {
 				`No model ${row.provider}/${row.model_id} is registered.`,
 			);
 		}
-		const cwd = this.scratchDir(conversationId);
-		mkdirSync(cwd, { recursive: true, mode: 0o700 });
+		const agent = row.mode === "agent" ? this.resolveAgent(row) : undefined;
+		// spec/08-agent-mode.md §1: cwd is the workspace, and the folder must still exist.
+		const cwd = agent
+			? this.services.workspaces.requireUsable(row.workspace_id!).path
+			: this.scratchDir(conversationId);
+		if (!agent) mkdirSync(cwd, { recursive: true, mode: 0o700 });
 
 		const sessionManager = openSessionManager({
 			cwd,
 			sessionsDir: this.ctx.config.sessionsDir,
 			path: row.session_path,
 		});
-		const toolNames = this.resolvedToolNames(row);
+		const toolNames = agent ? agent.toolNames : this.resolvedToolNames(row);
 		// `noTools: "all"` would strip custom tools too, so the names *and* the definitions have
 		// to travel together (spike plan/spikes/08).
-		const web = toolNames.length > 0 ? this.services.createWebToolSet() : undefined;
+		const wantsWeb = toolNames.includes("web_search") || toolNames.includes("web_fetch");
+		const web = wantsWeb ? this.services.createWebToolSet() : undefined;
+		const customTools = [
+			...(web ? web.tools : []),
+			...(agent && toolNames.includes("memory_append")
+				? [this.memoryToolFor(conversationId, agent)]
+				: []),
+		];
 		const handle = await createSession({
 			config: {
 				conversationId,
-				mode: "chat",
+				mode: agent ? "agent" : "chat",
 				model,
 				thinkingLevel: row.thinking_level as ThinkingLevel,
 				cwd,
 				agentDir: this.ctx.config.agentDir,
 				modelRuntime: this.services.modelRuntime,
-				systemPrompt: this.systemPromptFor(row),
+				// Agent mode keeps pi's own prompt (spec/03-profiles.md §2, spike plan/spikes/09).
+				...(agent ? {} : { systemPrompt: this.systemPromptFor(row) }),
 				tools: toolNames,
-				...(web ? { customTools: web.tools } : {}),
+				...(customTools.length > 0 ? { customTools } : {}),
+				...(agent ? { agentsFiles: agent.agentsFiles, skills: agent.skills } : {}),
 			},
 			sessionManager,
 		});
@@ -350,6 +436,29 @@ export class ConversationService {
 
 	// --------------------------------------------------------------- pieces
 
+	/** spec/03-profiles.md §6 — the resolved profile behind an agent conversation. */
+	private resolveAgent(row: ConversationRow): ResolvedProfile {
+		if (!row.profile_id || !row.workspace_id) {
+			throw new ApiError(
+				"profile_not_found",
+				"This conversation's profile was deleted, so it can no longer run.",
+			);
+		}
+		return this.services.profiles.resolve(row.profile_id);
+	}
+
+	/** Every append emits a visible notice in the transcript (spec/03-profiles.md §5.3). */
+	private memoryToolFor(conversationId: string, agent: ResolvedProfile): unknown {
+		return createMemoryTool({
+			profileId: agent.profile.id,
+			profileName: agent.profile.name,
+			path: agent.memory.path,
+			store: this.services.memory,
+			nowIso: () => new Date().toISOString(),
+			onNotice: (text) => this.hub.notify(conversationId, { type: "notice", level: "info", text }),
+		});
+	}
+
 	/** spec/05-skills-and-tools.md §B.4 — chat mode's resolved tool names. */
 	private resolvedToolNames(row: ConversationRow): string[] {
 		const resolved = this.services.tools.resolveChat({ webSearch: row.web_search === 1 });
@@ -357,8 +466,14 @@ export class ConversationService {
 	}
 
 	private resolvedTools(row: ConversationRow) {
-		const names = new Set(this.resolvedToolNames(row));
-		return this.services.tools.list().filter((tool) => names.has(tool.name));
+		const names = new Set(
+			row.mode === "agent" && row.profile_id
+				? this.services.profiles.resolve(row.profile_id).toolNames
+				: this.resolvedToolNames(row),
+		);
+		// Preserve the resolved order: the Tools panel is the user's ground truth.
+		const catalog = this.services.tools.list();
+		return [...names].flatMap((name) => catalog.filter((tool) => tool.name === name));
 	}
 
 	private scratchDir(conversationId: string): string {
@@ -366,6 +481,14 @@ export class ConversationService {
 	}
 
 	private systemPromptFor(row: ConversationRow): string {
+		if (row.mode === "agent") {
+			// Fallback only: the real prompt comes from the live session (spec/09-api.md §8).
+			if (!row.profile_id) return "This conversation's profile was deleted.";
+			return this.services.profiles
+				.resolve(row.profile_id)
+				.agentsFiles.map((file) => file.content)
+				.join("\n\n");
+		}
 		return buildChatSystemPrompt({
 			webSearch: row.web_search === 1,
 			date: this.ctx.clock.nowIso().slice(0, 10),

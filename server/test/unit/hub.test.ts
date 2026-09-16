@@ -68,6 +68,8 @@ function makeHub(clock = new FakeClock(), maxConcurrentRuns = 4) {
 		events: new GlobalEventBus(),
 		nowMs: () => clock.nowMs(),
 		maxConcurrentRuns,
+		maxRunMinutes: 30,
+		maxToolCallsPerRun: 200,
 	});
 	return { hub, clock, sessions };
 }

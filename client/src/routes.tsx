@@ -5,6 +5,7 @@ import { ConversationPage } from "./pages/ConversationPage.js";
 import { ConversationsPage } from "./pages/ConversationsPage.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { PlaceholderPage } from "./pages/PlaceholderPage.js";
+import { ProfilesPage } from "./pages/ProfilesPage.js";
 import { ProvidersPage } from "./pages/ProvidersPage.js";
 import { ToolsPage } from "./pages/ToolsPage.js";
 import { WorkspacesPage } from "./pages/WorkspacesPage.js";
@@ -18,7 +19,7 @@ export const routes: RouteObject[] = [
 			{ index: true, element: <Navigate to="/conversations" replace /> },
 			{ path: "conversations", element: <ConversationsPage /> },
 			{ path: "c/:id", element: <ConversationPage /> },
-			{ path: "profiles", element: <PlaceholderPage title="Profiles" milestone="M5" /> },
+			{ path: "profiles", element: <ProfilesPage /> },
 			{ path: "workspaces", element: <WorkspacesPage /> },
 			{ path: "skills", element: <PlaceholderPage title="Skills" milestone="M6" /> },
 			{ path: "tools", element: <ToolsPage /> },

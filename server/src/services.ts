@@ -9,9 +9,12 @@ import type { FakeModelHandle } from "./pi/fake-model.js";
 import { ModelService } from "./pi/model-service.js";
 import { createPiRuntime, type ModelRuntime } from "./pi/runtime.js";
 import { createWebTools, type WebToolSet } from "./pi/tools/web-search.js";
+import { MemoryStore } from "./profiles/memory.js";
+import { ProfileService } from "./profiles/service.js";
 import { createSearchProvider, type WebSearchProvider } from "./search/providers.js";
 import { GlobalEventBus } from "./session/bus.js";
 import { SessionHub } from "./session/hub.js";
+import { SkillCatalog } from "./skills/catalog.js";
 import { ToolRegistry } from "./tools/registry.js";
 import { WorkspaceService } from "./workspaces/service.js";
 
@@ -22,6 +25,10 @@ export interface Services {
 	events: GlobalEventBus;
 	hub: SessionHub;
 	conversations: ConversationService;
+	profiles: ProfileService;
+	skills: SkillCatalog;
+	/** The per-profile memory file store; owns the append mutex. */
+	memory: MemoryStore;
 	/** The configured web-search provider (`none` when unset). */
 	search: WebSearchProvider;
 	tools: ToolRegistry;
@@ -46,6 +53,10 @@ export async function createServices(ctx: AppContext): Promise<Services> {
 	});
 	const tools = new ToolRegistry({ repos: ctx.repos, search, logger: ctx.logger });
 	tools.validateAgainstPi(installedBuiltinToolNames());
+	const skills = new SkillCatalog(ctx);
+	const memory = new MemoryStore();
+	const profiles = new ProfileService(ctx, { tools, skills, memory });
+	profiles.seedIfEmpty();
 	const models = new ModelService({ runtime, nowMs: () => ctx.clock.nowMs() });
 	const credentials = new CredentialService({
 		runtime,
@@ -66,6 +77,8 @@ export async function createServices(ctx: AppContext): Promise<Services> {
 		events,
 		nowMs: () => ctx.clock.nowMs(),
 		maxConcurrentRuns: ctx.config.maxConcurrentRuns,
+		maxRunMinutes: ctx.config.maxRunMinutes,
+		maxToolCallsPerRun: ctx.config.maxToolCallsPerRun,
 		onRunEnd: (conversationId, session) =>
 			services.conversations.recordRunEnd(conversationId, session),
 	});
@@ -78,6 +91,9 @@ export async function createServices(ctx: AppContext): Promise<Services> {
 		hub,
 		search,
 		tools,
+		profiles,
+		skills,
+		memory,
 		workspaces: new WorkspaceService(ctx),
 		createWebToolSet: () =>
 			createWebTools({

@@ -48,7 +48,12 @@ export interface ResourceLoaderInput {
 	cwd: string;
 	agentDir: string;
 	settingsManager: SettingsManager;
-	systemPrompt: string;
+	/**
+	 * Chat mode's fixed prompt. **Omitted in agent mode**: spec/03-profiles.md §2 requires pi's
+	 * own system prompt (tool guidance + skill block) to be preserved there, and AGENTS.md +
+	 * memory ride in as context files instead (spike plan/spikes/09).
+	 */
+	systemPrompt?: string;
 	/** Agent mode only; chat mode contributes none of these (spec/07-chat-mode.md §1). */
 	agentsFiles?: { path: string; content: string }[];
 	skills?: unknown[];
@@ -72,7 +77,9 @@ export async function createResourceLoader(
 		noPromptTemplates: true,
 		noThemes: true,
 		noContextFiles: true,
-		systemPromptOverride: () => input.systemPrompt,
+		...(input.systemPrompt === undefined
+			? {}
+			: { systemPromptOverride: () => input.systemPrompt as string }),
 		skillsOverride: () => ({ skills: (input.skills ?? []) as never[], diagnostics: [] }),
 		promptsOverride: (base) => ({ prompts: [], diagnostics: base.diagnostics }),
 		agentsFilesOverride: () => ({ agentsFiles: input.agentsFiles ?? [] }),

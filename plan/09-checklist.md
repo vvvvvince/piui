@@ -29,6 +29,7 @@ Rule for every line below: **failing test first**, then code, then refactor, com
 - [ ] S8 skill commands + prompt templates (M5b)
 - [ ] S9 `bindExtensions` + `additionalExtensionPaths` (M5c)
 - [x] S10 `defineTool` + injectable fetch · S11 built-in tool names · S12 usage/cost accessors
+- [x] S9 built-in tools for real: names, params, `tool_execution_*` payloads (`plan/spikes/09`)
 
 ## M0 — skeleton + harness
 - [x] npm workspaces, TS strict, ESM, lint/format, scripts
@@ -86,14 +87,15 @@ Rule for every line below: **failing test first**, then code, then refactor, com
 - [x] **Gate:** `04-workspaces#7.1–7.6`
 
 ## M5 — profiles + agent mode
-- [ ] skills read path (scan + list)
-- [ ] profile CRUD + AGENTS.md side effects + trash-on-delete + warnings
-- [ ] resolution pipeline + `resolveTools` permutations (chat ⇒ zero fs tools)
-- [ ] memory Phase 0: skeleton, `parseMemory`, injection + notices, `memory_append`, mutex, panel
-- [ ] agent conversations, immutability rules, missing-workspace error
-- [ ] tool cards (read/write/edit-diff/bash-stream/grep/find/ls), side panel, Files refetch
-- [ ] steering/follow-up/abort-with-restore; retry + compaction notices
-- [ ] **Gate:** `03-profiles#8`, `17-memory#7`, `08-agent-mode#8`
+- [x] skills read path (scan + list)
+- [x] profile CRUD + AGENTS.md side effects + trash-on-delete + warnings
+- [x] resolution pipeline + `resolveTools` permutations (chat ⇒ zero fs tools)
+- [x] memory Phase 0: skeleton, `parseMemory`, injection + notices, `memory_append`, mutex, panel
+- [x] agent conversations, immutability rules, missing-workspace error
+- [x] tool cards (read/write/edit-diff/bash-stream/grep/find/ls), side panel, Files refetch
+- [x] steering/follow-up/abort-with-restore; retry + compaction notices
+- [x] runaway guards (wall clock + tool-call cap), no approval gates
+- [x] **Gate:** `03-profiles#8`, `17-memory#7`, `08-agent-mode#8`
 
 ## M5b — commands
 - [ ] `/commands`, `/api/prompts` (+ rescan), template composition & precedence

@@ -10,7 +10,9 @@ import type {
 	ConversationSummary,
 	CreateConversationRequest,
 	CreateConversationResponse,
+	CreateProfileRequest,
 	CreateWorkspaceRequest,
+	DeleteProfileResponse,
 	DeleteWorkspaceResponse,
 	FsBrowseResponse,
 	HealthResponse,
@@ -20,12 +22,17 @@ import type {
 	MetaResponse,
 	ModelsResponse,
 	PatchConversationRequest,
+	PatchProfileRequest,
 	PatchWorkspaceRequest,
 	PostMessageResponse,
+	ProfileDetail,
+	ProfileMemoryResponse,
+	ProfilesResponse,
 	ProviderStatus,
 	ProvidersResponse,
 	QueueResponse,
 	SearchTestResponse,
+	SkillsResponse,
 	ToolCatalogItem,
 	ToolsResponse,
 	ValidatePathResponse,
@@ -158,6 +165,23 @@ export const api = {
 		request<ToolCatalogItem>(`/tools/${name}`, { method: "PATCH", body: { enabled } }),
 	testSearch: (query: string) =>
 		request<SearchTestResponse>("/tools/web_search/test", { method: "POST", body: { query } }),
+
+	// --------------------------------------------------------------- profiles
+	profiles: () => request<ProfilesResponse>("/profiles"),
+	profile: (id: string) => request<ProfileDetail>(`/profiles/${id}`),
+	createProfile: (body: CreateProfileRequest) =>
+		request<ProfileDetail>("/profiles", { method: "POST", body }),
+	patchProfile: (id: string, body: PatchProfileRequest) =>
+		request<ProfileDetail>(`/profiles/${id}`, { method: "PATCH", body }),
+	deleteProfile: (id: string) =>
+		request<DeleteProfileResponse>(`/profiles/${id}`, { method: "DELETE" }),
+	duplicateProfile: (id: string) =>
+		request<ProfileDetail>(`/profiles/${id}/duplicate`, { method: "POST" }),
+	profileMemory: (id: string) => request<ProfileMemoryResponse>(`/profiles/${id}/memory`),
+	putProfileMemory: (id: string, content: string) =>
+		request<{ sizeBytes: number }>(`/profiles/${id}/memory`, { method: "PUT", body: { content } }),
+	clearProfileMemory: (id: string) => request<void>(`/profiles/${id}/memory`, { method: "DELETE" }),
+	skills: () => request<SkillsResponse>("/skills"),
 
 	// ------------------------------------------------------------- workspaces
 	workspaces: () => request<WorkspacesResponse>("/workspaces"),

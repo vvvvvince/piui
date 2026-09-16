@@ -30,7 +30,9 @@ describe("GET /api/tools", () => {
 
 			const names = body.items.map((item) => item.name);
 			expect(names).toEqual(expect.arrayContaining(["read", "bash", "web_search", "web_fetch"]));
-			for (const item of body.items) expect(item.usedByProfiles).toBe(0);
+			// M5 seeds three profiles on first boot, and all three select `read` (spec/03 §1).
+			expect(body.items.find((item) => item.name === "read")!.usedByProfiles).toBe(3);
+			expect(body.items.find((item) => item.name === "memory_append")!.usedByProfiles).toBe(0);
 			// the default temp home has PIUI_SEARCH_PROVIDER=none
 			expect(body.webSearch).toEqual({ provider: "none", configured: false });
 			expect(body.items.find((item) => item.name === "web_search")!.enabled).toBe(false);

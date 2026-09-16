@@ -81,9 +81,9 @@ describe("app shell", () => {
 
 	it("routes to a placeholder page per section", async () => {
 		stubFetch(() => Promise.reject(new Error("offline")));
-		// /workspaces became real in M4; /profiles is still a placeholder until M5.
-		renderApp("/profiles");
-		expect(await screen.findByRole("heading", { name: "Profiles" })).toBeInTheDocument();
-		expect(screen.getByText(/arrives in milestone M5/)).toBeInTheDocument();
+		// /workspaces became real in M4 and /profiles in M5; /skills is still a placeholder.
+		renderApp("/skills");
+		expect(await screen.findByRole("heading", { name: "Skills" })).toBeInTheDocument();
+		expect(screen.getByText(/arrives in milestone M6/)).toBeInTheDocument();
 	});
 });

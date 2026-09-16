@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api/client.js";
+import { AgentSidePanel } from "../components/AgentSidePanel.js";
 import { Composer } from "../components/Composer.js";
 import { HotkeysDialog } from "../components/HotkeysDialog.js";
 import { MessageList } from "../components/MessageList.js";
@@ -57,6 +58,8 @@ export function ConversationPage(): JSX.Element {
 					</h1>
 					<p className="text-xs text-slate-500">
 						{detail.data?.model.provider}/{detail.data?.model.modelId}
+						{detail.data?.profile ? ` · ${detail.data.profile.name}` : ""}
+						{detail.data?.workspace ? ` · ${detail.data.workspace.name}` : ""}
 						{detail.data?.webSearch ? " · web search" : ""}
 					</p>
 				</div>
@@ -94,7 +97,18 @@ export function ConversationPage(): JSX.Element {
 				</div>
 			))}
 
-			<MessageList messages={stream.messages} />
+			<div className="flex min-h-0 flex-1">
+				<div className="flex min-w-0 flex-1 flex-col">
+					<MessageList messages={stream.messages} />
+				</div>
+				{detail.data?.mode === "agent" && (
+					<AgentSidePanel
+						conversation={detail.data}
+						messages={stream.messages}
+						doneCount={stream.doneCount}
+					/>
+				)}
+			</div>
 
 			{(stream.queue.steering.length > 0 || stream.queue.followUp.length > 0) && (
 				<ul className="flex flex-wrap gap-2 px-4 pb-2" aria-label="Queued messages">
@@ -123,12 +137,14 @@ export function ConversationPage(): JSX.Element {
 					onDequeue: async () => joinQueue(await api.clearQueue(id)),
 				}}
 			>
-				<WebSearchToggle
-					value={detail.data?.webSearch === true}
-					configured={meta.data?.searchProvider.configured === true}
-					disabled={streaming || setWebSearch.isPending}
-					onChange={(next) => setWebSearch.mutate(next)}
-				/>
+				{detail.data?.mode !== "agent" && (
+					<WebSearchToggle
+						value={detail.data?.webSearch === true}
+						configured={meta.data?.searchProvider.configured === true}
+						disabled={streaming || setWebSearch.isPending}
+						onChange={(next) => setWebSearch.mutate(next)}
+					/>
+				)}
 				{detail.data && detail.data.tools.length > 0 && (
 					<span className="text-[11px] text-slate-500">
 						tools: {detail.data.tools.map((tool) => tool.name).join(", ")}

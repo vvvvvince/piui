@@ -546,3 +546,150 @@ and `repository scoping > keeps workspaces scoped the same way` failed by name (
 - `GET /api/workspaces/:id/project-resources` + the trust dialog are M5b.
 - `git` shells out synchronously (`execFileSync`, 5 s): fine for a button and a run end, but if
   M5 refreshes it per tool call it should move off the event loop.
+
+---
+
+## M5 — Profiles, memory Phase 0, agent mode ✅
+
+**Shipped**
+
+- *Spike S9* (`plan/spikes/09-builtin-tools.md`) before any tool card: pi's built-in tool names,
+  parameter shapes and `tool_execution_*` payloads run for real against the fake provider. Four
+  facts drove the code: `edit` returns `details.{diff,patch,firstChangedLine}`; `bash` streams a
+  **cumulative** `partialResult` and has **no exit-code field** (only `isError` + a trailing
+  "Command exited with code N"); `grep`/`find` shell out to `rg`/`fd` under the *real*
+  `~/.pi/agent/bin` (so the suite never asserts a successful one); and agent mode must **not**
+  pass `systemPromptOverride` — pi's default prompt carries the tool list and the
+  `<available_skills>` block, AGENTS.md and memory ride in as `agentsFiles`.
+- `server/src/skills/catalog.ts` + `SkillRepository` — the M5 read path: scan
+  `$PIUI_HOME/skills/*/SKILL.md`, tolerant frontmatter parse, mirror into `skills`, a vanished
+  directory is `enabled = 0, missing: true` (never deleted, so profile references survive),
+  `GET /api/skills` with `usedByProfiles`, and `resolve(skillIds)` → pi `Skill` objects with a
+  **warning** (not a 500) for anything missing.
+- `server/src/profiles/service.ts` — CRUD with file side effects (`AGENTS.md` written on save,
+  the **file wins** on an external edit because it is the only store — the schema has no column),
+  delete moves the directory to `$PIUI_HOME/trash/<id>-<ts>/`, duplicate, the seven validation
+  rules of §7 (incl. the new `agents_md_too_large` code), the three seed profiles on first boot,
+  and `resolve(profileId)` → `ResolvedProfile { agentsFiles, skills, builtin/custom tool names,
+  memory, warnings }` — the one input to agent session construction.
+- `server/src/profiles/memory.ts` — the normative file format: `memorySkeleton`, `parseMemory`
+  (tolerant: continuation lines join their note, non-conforming bullets and stray paragraphs are
+  preserved as `section.other`), `noteId` = `sha256(normalized)[0..12]`, `buildMemoryBlock`
+  (whole file, or the last 32 KB cut on a paragraph boundary with `…(earlier notes omitted)…`),
+  `appendToFile` and `MemoryStore` with the per-profile async mutex.
+- `server/src/pi/tools/memory.ts` — `memory_append`: dated line format, case-insensitive dedupe
+  ("already remembered"), 2000-char note cap, 1 MB file cap, and a `notice` in the transcript on
+  every successful append. `selectableInProfile: false` stays — it follows `memory.enabled`.
+- `ToolRegistry.resolveTools({ mode, webSearch, profile })` — the correctness centre. Chat mode
+  returns `builtinToolNames: []` whatever the profile says; agent mode splits the profile's
+  selection into pi built-ins vs. piui custom tools, drops unknown/globally-disabled/unconfigured
+  names with a warning, and appends `memory_append` iff memory is on.
+- Agent conversations: `POST /api/conversations { mode: "agent" }` requires `profileId` +
+  `workspaceId`, calls `WorkspaceService.requireUsable` (the M4 seam) **and** builds the pi
+  session eagerly so `systemPromptPreview` is the real composed prompt; `cwd` = workspace path;
+  `thinkingLevel` = request > profile default > `off`; resolution warnings are returned.
+  `PATCH` refuses a profile/workspace move with `409 immutable_after_start`.
+- Runaway guards in `LiveSession` (§6, **no** approval gates): a wall-clock timer
+  (`PIUI_MAX_RUN_MINUTES`, default 30) and a per-run tool-call cap (`PIUI_MAX_TOOL_CALLS`,
+  default 200). Either one emits a `notice` ("Stopped after … Send another message to continue.")
+  and aborts. A grep test asserts the repository contains no Approve/Deny/denylist machinery.
+- Client: `/profiles` (list, editor with Instructions/Tools/Skills/Memory tabs, danger badges,
+  implicit `memory_append` row, warning banners, in-app delete dialog quoting the conversation
+  count, duplicate) and the Memory panel ("injecting X of Y", "memory truncated", the
+  pinned-notes-not-yet-special sentence, edit/download/clear).
+- Client: agent transcript renderers (`edit` → coloured diff from `details.patch`/`diff`, `bash`
+  → command + copy + streaming terminal block, `write` → byte count + content, `read` → line
+  range, `grep`/`find`/`ls` → compact list, `memory_append` → one line), the
+  Files·Tools·Profile·Memory·Usage side panel, and the agent tab in the new-conversation dialog.
+
+**Verified by hand (Firefox via MCP, dev server on `/tmp/piui-m5-home` + `/tmp/piui-m5-roots`)**
+
+1. `/profiles` shows the three seeds; created "Browser demo", edited AGENTS.md, ticked tools,
+   turned memory on. Resolution warnings render as banners
+   (*Tool "web_search" is not configured on this server and was dropped.*). ✅
+2. New conversation → **agent** tab → profile + workspace pickers → agent view with the header
+   chips (`piui-fake/fake-1 · Browser demo · alpha`), the side panel and the resolved tool list
+   under the composer. ✅
+3. One prompt drove `write` → `bash` → `edit` → `memory_append`: the write card showed
+   "36 B written", the bash card streamed and ended "exited 0", and **`edit` failed with
+   "Tool edit not found"** because the profile does not grant it — `03-profiles#8.1` visible in
+   the browser. `hello.js` appeared in the **Files** tab with the touched dot *during* the run,
+   not at `done`. `memory.md` on disk had exactly one dated line under `## Notes`. ✅
+4. Steering while streaming, a **reload mid-run** (snapshot rebuilt the transcript, no duplicate
+   bubbles, still streaming), and **abort-with-restore** (Stop → the queued follow-up came back
+   into the composer). ✅
+5. Suite: 302 tests green, offline, ~8 s; lint + strict typecheck clean; production build serves
+   profile CRUD, agent creation and a streamed run on one port.
+
+**Deviations / decisions**
+
+- *No `systemPromptOverride` in agent mode* (spike S9b). `03-profiles` §2 requires pi's default
+  prompt to survive; the chat-mode override stays. `createResourceLoader`'s `systemPrompt` is now
+  optional, which is the whole difference between the two modes at the pi boundary.
+- *`profile_not_found` is 404, not 400.* `08-agent-mode` §1 spells it out; `errors.ts` (written in
+  M0 from §0's unordered code list) had it at 400.
+- *A user-initiated stop is not an error.* pi ends the turn after `abort()` with
+  `stopReason: "error"`, `errorMessage: "This operation was aborted"`, which painted a red error
+  bubble. `isAbortedMessage`/`roleOfAssistant` in `transcript.ts` now classify it once, and both
+  projection paths plus `lastRunReason` route through them — root cause, not per-caller patch.
+- *Agent mode builds its session eagerly at creation* (and `GET /api/conversations/:id` ensures
+  one, swallowing failures). That is what makes `systemPromptPreview` "the real composed prompt,
+  not a guess" (`09-api` §8) and it also means `session_path` exists immediately, so
+  `immutable_after_start` has a crisp meaning. A conversation whose workspace vanished still
+  loads (the prompt route is where it 409s) — `08-agent-mode#8.7`.
+- *AGENTS.md is edited in a `<textarea>` with a counter and the 16 KB warning*, not CodeMirror.
+  Adding an editor dependency for one field is exactly the bloat the spec's UI section invites;
+  M6 needs a real file editor for skills and can bring CodeMirror in once, for both.
+- *`memory.md` is the only store for memory and `AGENTS.md` the only store for instructions* —
+  no DB mirror, so "the file wins on an external edit" is true by construction rather than by a
+  sync rule.
+- *Open item 1 — Files panel refresh*: the agent Files tab keys its tree query on the number of
+  **completed `write`/`edit` tool blocks** as well as on `doneCount`, so a file appears mid-run
+  (seen in the browser) and again after `done`; touched paths get a dot. `tree` stays one level
+  deep: the panel navigates by clicking, a recursive walk on every write would be the expensive
+  option, and `?depth` remains accepted-and-ignored for M6. Offline story: the server test proves
+  the tree is read from disk per request; the client test rerenders with an extra completed
+  `write` block and asserts a new `/tree` request.
+- *Open item 2 — immutability lives in `ConversationService.patch`*, not the route, mirroring M4's
+  `requireUsable` decision; the route schema merely accepts `profileId`/`workspaceId` so the 409
+  is reachable. Mutation-checked below.
+- *Open item 3 — `git status` stays synchronous.* Agent runs never call it: the agent Files tab
+  does not render the git badge, and the workspaces page still refreshes it only on
+  `conversation_done`. Re-parked; if M6 puts a git panel next to a running agent, it moves off
+  the event loop then.
+- *Open item 4 — concrete caps*: wall clock `PIUI_MAX_RUN_MINUTES` (30) and tool calls
+  `PIUI_MAX_TOOL_CALLS` (200) per run, both surfaced as a `notice` naming the env var and
+  telling the user to send another message. **Output bytes get no new cap**: tool output is
+  already truncated at 16 KB per call before it reaches the model or the ring, and the ring is
+  capped at 8 MB / 2000 events — a third counter would duplicate those with no new guarantee.
+- *`memory_append` errors are thrown, not returned* — pi 0.85.1's `AgentToolResult` has no
+  `isError` field; pi converts a thrown error into the error result (spike S9).
+- Scope honestly deferred: `includeDiscoveredSkills` / `disabledExtensionIds` /
+  `allowDynamicExtensionTools` are stored but not resolved (M5b/M5c), the profile editor has no
+  template-insert menu or model defaults picker, and skills CRUD/import/test-run stays M6.
+
+**Mutation spot-check (§9.6)** — three mutants, all caught by name:
+
+1. `resolveTools`'s `if (input.mode === "chat")` → `if (false)` (chat falls through to the
+   profile's selection) ⇒ `[05-skills-and-tools#B.4] chat mode yields zero filesystem tools,
+   whatever the profile says` failed (1 failed, 5 passed).
+2. removed the `session_path || live` condition from the immutability guard ⇒
+   `agent mode > requires a profile and a workspace, and freezes both once the session exists`
+   failed (1 failed, 11 passed).
+3. dropped the duplicate short-circuit in `appendToFile` ⇒
+   `memory_append > deduplicates case-insensitively without writing again` failed
+   (1 failed, 3 passed). All reverted. ✅
+
+**Open for M5b**
+
+- `GET /api/conversations/:id/commands`, prompt templates, `/` menu and the workspace trust
+  dialog are the next milestone; `enableSkillCommands` is already `true` in the settings manager,
+  so `/skill:<name>` will work the moment the command surface exists.
+- The profile editor writes one field per request (`PATCH` per checkbox). Fine for a handful of
+  tools; if the editor grows a form-wide Save, batch it then.
+- `Researcher` (a seed profile) selects `web_search`/`web_fetch`, so on a server without a search
+  provider every agent conversation with it starts with two dropped-tool warnings. Correct, but
+  M6's tools UI should let the user see that from the profile list.
+- The `UserMenu` popover does not close on an outside click and can overlap the profile-editor
+  action buttons (seen in the browser, pre-existing since M1). One-line fix whenever M6 touches
+  the shell.

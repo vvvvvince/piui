@@ -104,6 +104,20 @@ export interface ResolvedTools {
 	warnings: string[];
 }
 
+/** spec/05-skills-and-tools.md §B.4 — the single input to tool resolution. */
+export interface ResolveToolsInput {
+	mode: "chat" | "agent";
+	webSearch: boolean;
+	profile?: { toolNames: readonly string[]; memoryEnabled: boolean };
+}
+
+export interface ResolvedToolSet extends ResolvedTools {
+	/** pi's own tools — the `tools` allowlist minus everything piui implements. */
+	builtinToolNames: string[];
+	/** piui `defineTool` definitions the session must also receive (spike plan/spikes/08). */
+	customToolNames: string[];
+}
+
 export class ToolRegistry {
 	constructor(private readonly deps: ToolRegistryDeps) {}
 
@@ -184,6 +198,61 @@ export class ToolRegistry {
 	 * are added only when the toggle is on, the provider is configured, and neither tool has
 	 * been globally disabled. Enforced here, not at the call site.
 	 */
+	/**
+	 * The correctness centre (spec/05-skills-and-tools.md §B.4). Chat mode can never reach a
+	 * filesystem tool, whatever a profile says — enforced *here*, not at the call site.
+	 */
+	resolveTools(input: ResolveToolsInput): ResolvedToolSet {
+		if (input.mode === "chat") {
+			const chat = this.resolveChat({ webSearch: input.webSearch });
+			return {
+				builtinToolNames: [],
+				customToolNames: chat.toolNames,
+				toolNames: chat.toolNames,
+				warnings: chat.warnings,
+			};
+		}
+		return this.resolveAgent(input.profile ?? { toolNames: [], memoryEnabled: false });
+	}
+
+	/** Agent mode: the profile's selection minus unknown/disabled names, plus memory_append. */
+	private resolveAgent(profile: {
+		toolNames: readonly string[];
+		memoryEnabled: boolean;
+	}): ResolvedToolSet {
+		const warnings: string[] = [];
+		const builtinToolNames: string[] = [];
+		const customToolNames: string[] = [];
+		const catalog = new Map(this.list().map((item) => [item.name, item]));
+
+		for (const name of profile.toolNames) {
+			const item = catalog.get(name);
+			if (!item) {
+				warnings.push(`Tool "${name}" no longer exists and was dropped from this profile.`);
+				continue;
+			}
+			if (!item.enabled) {
+				warnings.push(
+					item.kind === "builtin_piui" && !this.deps.search.configured
+						? `Tool "${name}" is not configured on this server and was dropped.`
+						: `Tool "${name}" is disabled globally by an administrator and was dropped.`,
+				);
+				continue;
+			}
+			(item.kind === "builtin_pi" ? builtinToolNames : customToolNames).push(name);
+		}
+		// §4: memory_append is implied by memory.enabled, never individually selectable.
+		if (profile.memoryEnabled && !customToolNames.includes("memory_append")) {
+			customToolNames.push("memory_append");
+		}
+		return {
+			builtinToolNames,
+			customToolNames,
+			toolNames: [...builtinToolNames, ...customToolNames],
+			warnings,
+		};
+	}
+
 	resolveChat(input: { webSearch: boolean }): ResolvedTools {
 		if (!input.webSearch) return { toolNames: [], warnings: [] };
 		const warnings: string[] = [];

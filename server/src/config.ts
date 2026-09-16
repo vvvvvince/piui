@@ -29,6 +29,8 @@ export interface Config {
 	readonly maxUploadMb: number;
 	readonly maxConcurrentRuns: number;
 	readonly maxRunMinutes: number;
+	/** spec/08-agent-mode.md §6 — the second runaway guard: tool calls in one run. */
+	readonly maxToolCallsPerRun: number;
 	readonly username: string;
 	readonly password: string;
 	readonly defaultCredentials: boolean;
@@ -175,6 +177,7 @@ export function parseConfig(env: Env = process.env): ParsedConfig {
 		maxUploadMb: num(env, "PIUI_MAX_UPLOAD_MB", 10),
 		maxConcurrentRuns: num(env, "PIUI_MAX_CONCURRENT_RUNS", 4),
 		maxRunMinutes: num(env, "PIUI_MAX_RUN_MINUTES", 30),
+		maxToolCallsPerRun: num(env, "PIUI_MAX_TOOL_CALLS", 200),
 		username,
 		password,
 		defaultCredentials,

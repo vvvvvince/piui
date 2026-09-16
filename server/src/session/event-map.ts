@@ -4,8 +4,10 @@ import type { UiBlock, UiEvent, UiMessage } from "@piui/shared";
 import {
 	blocksOfAssistant,
 	costOf,
+	isAbortedMessage,
 	type MessageIds,
 	type PiMessage,
+	roleOfAssistant,
 	safeDetails,
 	truncateOutput,
 } from "./transcript.js";
@@ -294,11 +296,12 @@ export class EventProjector {
 			this.toolBlocks.set(block.toolCallId, { messageId: id, block });
 		}
 		const usage = message.usage;
+		const aborted = isAbortedMessage(message);
 		const finished: UiMessage = {
 			id,
-			role: message.stopReason === "error" ? "error" : "assistant",
+			role: roleOfAssistant(message),
 			blocks:
-				message.stopReason === "error" && blocks.length === 0
+				message.stopReason === "error" && !aborted && blocks.length === 0
 					? [
 							{
 								type: "text",
@@ -319,7 +322,7 @@ export class EventProjector {
 					}
 				: {}),
 			...(message.model ? { model: message.model } : {}),
-			...(message.stopReason === "aborted" ? { stopped: true as const } : {}),
+			...(aborted ? { stopped: true as const } : {}),
 			createdAt: new Date(message.timestamp ?? this.now()).toISOString(),
 		};
 		this.current = undefined;

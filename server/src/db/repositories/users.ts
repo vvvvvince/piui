@@ -22,6 +22,16 @@ export class UserRepository extends Repository {
 			| undefined;
 	}
 
+	/** Owner of machine-created rows (the filesystem skill mirror). The seeded admin. */
+	adminId(): string {
+		const row = this.db
+			.prepare(
+				"SELECT id FROM users WHERE role = 'admin' AND active = 1 ORDER BY created_at LIMIT 1",
+			)
+			.get() as { id: string } | undefined;
+		return row?.id ?? "local";
+	}
+
 	list(): UserRow[] {
 		return this.db.prepare("SELECT * FROM users ORDER BY username").all() as UserRow[];
 	}

@@ -44,6 +44,19 @@ export class WorkspaceRepository extends Repository {
 		return row;
 	}
 
+	/** Unscoped read for the background machinery (the Missing guard runs without a principal). */
+	getById(id: string): WorkspaceRow | undefined {
+		return this.db.prepare("SELECT * FROM workspaces WHERE id = ?").get(id) as
+			| WorkspaceRow
+			| undefined;
+	}
+
+	findByName(name: string): WorkspaceRow | undefined {
+		return this.db.prepare("SELECT * FROM workspaces WHERE name = ?").get(name) as
+			| WorkspaceRow
+			| undefined;
+	}
+
 	findByPath(path: string): WorkspaceRow | undefined {
 		return this.db.prepare("SELECT * FROM workspaces WHERE path = ?").get(path) as
 			| WorkspaceRow
@@ -87,11 +100,12 @@ export class WorkspaceRepository extends Repository {
 		const row = this.getForWrite(principal, id);
 		this.db
 			.prepare(
-				`UPDATE workspaces SET name = ?, description = ?, visibility = ?, trusted = ?,
+				`UPDATE workspaces SET name = ?, path = ?, description = ?, visibility = ?, trusted = ?,
 					trust_decided_at = ?, updated_at = ? WHERE id = ?`,
 			)
 			.run(
 				patch.name ?? row.name,
+				patch.path ?? row.path,
 				patch.description ?? row.description,
 				patch.visibility ?? row.visibility,
 				patch.trusted === undefined ? row.trusted : patch.trusted ? 1 : 0,

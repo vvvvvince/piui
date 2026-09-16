@@ -10,6 +10,9 @@ import type {
 	ConversationSummary,
 	CreateConversationRequest,
 	CreateConversationResponse,
+	CreateWorkspaceRequest,
+	DeleteWorkspaceResponse,
+	FsBrowseResponse,
 	HealthResponse,
 	LoginResponse,
 	MeResponse,
@@ -17,6 +20,7 @@ import type {
 	MetaResponse,
 	ModelsResponse,
 	PatchConversationRequest,
+	PatchWorkspaceRequest,
 	PostMessageResponse,
 	ProviderStatus,
 	ProvidersResponse,
@@ -24,7 +28,13 @@ import type {
 	SearchTestResponse,
 	ToolCatalogItem,
 	ToolsResponse,
+	ValidatePathResponse,
 	VerifyProviderResponse,
+	Workspace,
+	WorkspaceFileResponse,
+	WorkspaceGitResponse,
+	WorkspacesResponse,
+	WorkspaceTreeResponse,
 } from "@piui/shared";
 
 export class ApiClientError extends Error {
@@ -148,6 +158,27 @@ export const api = {
 		request<ToolCatalogItem>(`/tools/${name}`, { method: "PATCH", body: { enabled } }),
 	testSearch: (query: string) =>
 		request<SearchTestResponse>("/tools/web_search/test", { method: "POST", body: { query } }),
+
+	// ------------------------------------------------------------- workspaces
+	workspaces: () => request<WorkspacesResponse>("/workspaces"),
+	createWorkspace: (body: CreateWorkspaceRequest) =>
+		request<Workspace>("/workspaces", { method: "POST", body }),
+	patchWorkspace: (id: string, body: PatchWorkspaceRequest) =>
+		request<Workspace>(`/workspaces/${id}`, { method: "PATCH", body }),
+	deleteWorkspace: (id: string) =>
+		request<DeleteWorkspaceResponse>(`/workspaces/${id}`, { method: "DELETE" }),
+	validatePath: (path: string, create?: boolean) =>
+		request<ValidatePathResponse>("/workspaces/validate", {
+			method: "POST",
+			body: { path, ...(create ? { create: true } : {}) },
+		}),
+	workspaceTree: (id: string, path = "") =>
+		request<WorkspaceTreeResponse>(`/workspaces/${id}/tree?path=${encodeURIComponent(path)}`),
+	workspaceFile: (id: string, path: string) =>
+		request<WorkspaceFileResponse>(`/workspaces/${id}/file?path=${encodeURIComponent(path)}`),
+	workspaceGit: (id: string) => request<WorkspaceGitResponse>(`/workspaces/${id}/git`),
+	browse: (path?: string) =>
+		request<FsBrowseResponse>(`/fs/browse${path ? `?path=${encodeURIComponent(path)}` : ""}`),
 
 	// ---------------------------------------------------------- conversations
 	conversations: () =>

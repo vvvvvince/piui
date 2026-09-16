@@ -14,6 +14,7 @@ import { registerGlobalEventRoutes } from "./routes/events.js";
 import { registerModelRoutes } from "./routes/models.js";
 import { registerProviderRoutes } from "./routes/providers.js";
 import { registerToolRoutes } from "./routes/tools.js";
+import { registerWorkspaceRoutes } from "./routes/workspaces.js";
 
 declare module "fastify" {
 	interface FastifyInstance {
@@ -147,6 +148,7 @@ export async function buildServer(ctx: AppContext, injected?: Services) {
 	await registerModelRoutes(app, services);
 	await registerGlobalEventRoutes(app, services);
 	await registerToolRoutes(app, ctx, services);
+	await registerWorkspaceRoutes(app, services.workspaces);
 	await registerConversationRoutes(app, services.conversations, services.hub);
 
 	if (ctx.serveClient && existsSync(join(config.clientDist, "index.html"))) {

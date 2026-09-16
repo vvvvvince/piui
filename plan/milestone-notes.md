@@ -434,3 +434,115 @@ and `repository scoping > keeps workspaces scoped the same way` failed by name (
   wiring is asserted offline, running the image is not.
 - `memory_append` is listed in the catalog but not implemented (M5); it is flagged
   `selectableInProfile: false`, so nothing can select it yet.
+
+---
+
+## M4 — Workspaces ✅
+
+**Shipped**
+
+- `server/src/workspaces/paths.ts` — the whole of `04-workspaces` §2 in one pure-ish module:
+  `~` expansion, NUL/relative/empty refusal, `realpath` **before** every containment check,
+  denylist (`/`, `/etc`, `/dev`, `/proc`, `/sys`, `/boot`, `/usr`, `/bin`, `/sbin`, `/lib*`,
+  `/var/lib`, `$HOME` exactly, `$PIUI_HOME` + subtree, `~/.pi`, `~/.ssh`, `~/.gnupg`, `~/.aws`,
+  `~/.config`, the install dir, plus the Windows equivalents) and `PIUI_WORKSPACE_ROOTS` with a
+  separator-aware prefix test (`isInside`, exported and reused by the tree/browse guards).
+- `server/src/workspaces/service.ts` — CRUD, `probe()` (exists/writable/isGitRepo/entryCount,
+  capped at 500, recomputed on every read), `mkdir -p 0o755` + `git init`, one-level `tree`
+  (hidden flagged, 1000-entry cap, `path_escape` on `..`/absolute/symlink escape), `file`
+  (512 KB cap, NUL sniff → `415 binary_file`, language guess), `gitStatus` (one
+  `status --porcelain=v1 --branch` + one `log -1`, `--no-optional-locks`, 5 s, `available:false`
+  when git is absent or the folder is not a repo), `browse` (dirs only, denylist honoured, roots
+  honoured including their ancestors so the picker can walk down to them) and `requireUsable`.
+- Routes `server/src/http/routes/workspaces.ts` (`09-api` §5) incl. `POST /validate` registered
+  before `/:id`, and `GET /api/fs/browse` — already admin-only via the `http/authz.ts` matcher.
+- Repository additions: `workspaces.getById/findByName` + `path` in the update statement;
+  `conversations.countInWorkspace` (the "2 active conversations" badge),
+  `countStartedInWorkspace` (the `immutable_after_start` test) and `detachWorkspace`
+  (delete → `workspace_id = NULL`, returns `affectedConversations`).
+- `workspace_missing` re-mapped to **409** (`09-api` §5 wants a 409, `errors.ts` had 400) and a
+  new `binary_file` → 415.
+- Client: `/workspaces` (list with Missing / git / read-only / entry-count badges, active
+  conversation warning, create dialog with live `validate` on blur, server-side directory
+  picker, edit/relocate, in-app removal dialog quoting §6 verbatim) and `WorkspaceFiles`
+  (breadcrumb tree, read-only preview, git badge, refetch on `conversation_done`).
+
+**Verified by hand (04-workspaces §7, Firefox via MCP, dev server on `/tmp/piui-m4-roots`)**
+
+1. `/etc` → *"/etc is a system or piui-owned folder."* in the dialog, nothing registered;
+   `/tmp/piui-m4-roots/alpha` registered fine. ✅ (§7.1)
+2. `/tmp/piui-m4-roots/escape` → symlink to `/tmp/piui-m4-outside` → *"This server only allows
+   workspaces under: /tmp/piui-m4-roots."* ✅ (§7.2)
+3. Picker walked `roots → alpha`, "use this folder" filled the form, create + `git init`
+   produced `.git`; the card shows `git`, and the panel shows `master · 1 dirty`. ✅ (§7.3)
+4. Wrote a file into the workspace by hand, then drove a real fake-model chat run: the `done`
+   event on `/api/events` refetched the tree and `agent-wrote-this.md` appeared **without a
+   reload**. ✅ (§7.4)
+5. `mv alpha alpha-moved` → the card flipped to **Missing** with "new prompts are blocked until
+   you relocate it. Nothing was deleted", Files hidden, Relocate → PATCH path → healthy again.
+   The 409 itself is asserted server-side (agent mode is M5). ✅ (§7.5)
+6. Remove → in-app dialog with the spec sentence → record gone, `ls` still shows `.git`,
+   `README.md`, `agent-wrote-this.md`, `dirty.txt`, `src`. ✅ (§7.6)
+7. Production build: `npm run build && NODE_ENV=production node server/dist/index.js` →
+   login, validate, create, list, tree, file and the denylist all answer on one port; SPA 200.
+8. Suite: 249 tests green, offline, ~14 s; lint + strict typecheck clean.
+
+**Deviations / decisions**
+
+- *Denylist is checked before permissions and before the roots.* `/etc` is unwritable for the
+  server user, so a naive order answered `path_not_writable` where §7.1 demands
+  `path_denylisted`; and with roots configured it would have answered `path_not_allowed`. The
+  denylist also runs on the **normalized** path before `realpath`, so a non-existent
+  `$PIUI_HOME/x` is refused as denylisted rather than "not found".
+- *The Missing check is a domain guard, not a route precondition* (open item 2).
+  `WorkspaceService.requireUsable(workspaceId)` throws `409 workspace_missing`; today it is
+  called from `ConversationService.prompt` for any conversation carrying a `workspace_id`. M5's
+  agent mode calls the same function in its session factory — the guard, not the route, is the
+  seam, so every future entry point inherits it. Mutation-checked below.
+- *`workspace_missing` is 409, not 400.* `09-api` §5 and `04-workspaces` §3 both say 409; the
+  code table in `errors.ts` (written in M0 from §0's list) had it at 400.
+- *`depth` is accepted and ignored* on `GET /:id/tree`: §3 pins V1 to `depth=1` (direct
+  children only). The parameter stays in the contract so M5's side panel can deepen it without
+  a client change.
+- *`activeConversations` counts non-archived conversations of the calling principal*, not live
+  runs: transcripts are private per user (`18-multi-user` §4), so a count that crossed owners
+  would leak. The UI wording ("active conversations … they can interfere") matches §4.
+- *Tests for §7.4 run offline in two halves* (open item 3): the server test proves the tree is
+  read from disk on every request (no cache to invalidate), and the client test drives a fake
+  `EventSource` with a `conversation_done` frame and asserts the new entry appears. The browser
+  check above closes the loop with a real run, without an agent.
+- *The wedged-tab item stays M7* (open item 1). M4 adds at most one more `EventSource` per tab
+  (the Files panel is single-open by construction, and it unsubscribes when closed), so it does
+  not move the needle on the 6-connection HTTP/1.1 budget; the fix worth doing is the one
+  already parked — one shared `EventSource` per tab multiplexing `/api/events`. No wedge was
+  observed during this milestone's browser session.
+- *`19-deployment#9.5` re-parked to M7* with the reason in `test/spec-exemptions.ts`: M4 covers
+  its `PIUI_WORKSPACE_ROOTS` half offline; the "agent-written file appears on the host as uid
+  10001" half needs agent mode (M5) **and** a running container.
+- `trusted` is stored and returned but no UI toggles it: the trust dialog is `15-commands` §3.3,
+  i.e. M5b. `GET /:id/project-resources` is deliberately absent until then.
+
+**Mutation spot-check (§9.6)** — three mutants, all caught by name:
+
+1. `isInside` → plain `startsWith` (no separator boundary) ⇒
+   `[04-workspaces#7.2] refuses a path outside PIUI_WORKSPACE_ROOTS, and a symlink that escapes
+   them` failed (1 failed, 200 passed).
+2. removed the `requireUsable` call from `ConversationService.prompt` ⇒
+   `[04-workspaces#7.5] marks a renamed folder Missing and blocks new prompts with 409` failed
+   (1 failed, 99 passed).
+3. `delete()` returning a hard-coded `affectedConversations: 0` (conversations never detached) ⇒
+   `[04-workspaces#7.6] deletes the record, detaches conversations and leaves every file on
+   disk` failed (1 failed, 13 passed). All reverted. ✅
+
+**Open for M5**
+
+- Agent mode must call `WorkspaceService.requireUsable` when it builds the session (cwd) as
+  well as on prompt, and pass `workspace.path` to `SessionManager.create` (spec §4).
+- `POST /api/conversations` still refuses `workspaceId` outright (chat-only, `07-chat-mode` §1);
+  M5 replaces that branch with profile/workspace resolution and the
+  `immutable_after_start` rule for `PATCH /api/conversations/:id`.
+- The file browser is one level deep and has no watch: M5's side panel may want `depth>1` and a
+  refetch on `tool_execution_end` for write/edit tools, not just on `done`.
+- `GET /api/workspaces/:id/project-resources` + the trust dialog are M5b.
+- `git` shells out synchronously (`execFileSync`, 5 s): fine for a button and a run end, but if
+  M5 refreshes it per tool call it should move off the event loop.

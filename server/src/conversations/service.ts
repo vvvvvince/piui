@@ -240,6 +240,9 @@ export class ConversationService {
 		streamingBehavior?: "steer" | "followUp",
 	): Promise<"steer" | "followUp" | null> {
 		const row = this.ctx.repos.conversations.getOrThrow(principal, id);
+		// spec/04-workspaces.md §§3,6 — a workspace whose folder vanished blocks new prompts with a
+		// clear 409, never a 500 from a failed cwd. Agent mode (M5) reuses the same guard.
+		if (row.workspace_id) this.services.workspaces.requireUsable(row.workspace_id);
 		const queuedAs = await this.hub.prompt(id, text, streamingBehavior);
 		if (row.title_locked === 0 && row.title === "") {
 			void this.autoTitle(row, text);

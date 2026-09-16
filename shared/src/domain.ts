@@ -55,12 +55,23 @@ export interface Profile extends Owned {
 	updatedAt: string;
 }
 
+/** spec/04-workspaces.md §3 — probed on every read, never cached into staleness. */
+export interface WorkspaceStatus {
+	exists: boolean;
+	writable: boolean;
+	isGitRepo: boolean;
+	entryCount?: number;
+}
+
 export interface Workspace {
 	id: string;
 	name: string;
 	path: string;
 	description: string;
-	status: { exists: boolean; writable: boolean; isGitRepo: boolean; entryCount?: number };
+	trusted: boolean;
+	status: WorkspaceStatus;
+	/** Conversations pointing at this workspace (spec/04-workspaces.md §4). */
+	activeConversations: number;
 	createdAt: string;
 	updatedAt: string;
 }

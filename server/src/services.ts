@@ -13,6 +13,7 @@ import { createSearchProvider, type WebSearchProvider } from "./search/providers
 import { GlobalEventBus } from "./session/bus.js";
 import { SessionHub } from "./session/hub.js";
 import { ToolRegistry } from "./tools/registry.js";
+import { WorkspaceService } from "./workspaces/service.js";
 
 export interface Services {
 	modelRuntime: ModelRuntime;
@@ -24,6 +25,7 @@ export interface Services {
 	/** The configured web-search provider (`none` when unset). */
 	search: WebSearchProvider;
 	tools: ToolRegistry;
+	workspaces: WorkspaceService;
 	/** One tool set per pi session: the per-run search budget lives in it. */
 	createWebToolSet(): WebToolSet;
 	fakeModel?: FakeModelHandle;
@@ -76,6 +78,7 @@ export async function createServices(ctx: AppContext): Promise<Services> {
 		hub,
 		search,
 		tools,
+		workspaces: new WorkspaceService(ctx),
 		createWebToolSet: () =>
 			createWebTools({
 				provider: search,

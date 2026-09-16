@@ -3,7 +3,7 @@
 // reviewed at every milestone gate.
 
 /** Milestones whose acceptance lists are enforced by test/spec-coverage.test.ts. */
-export const COMPLETED_MILESTONES = ["M0", "M1", "M2", "M3"] as const;
+export const COMPLETED_MILESTONES = ["M0", "M1", "M2", "M3", "M4"] as const;
 
 /** Permanently exempt: manual, environmental, or process criteria. */
 export const exemptions: Record<string, string> = {
@@ -42,7 +42,10 @@ export const pending: Record<string, string> = {
 	"15-commands-and-input#6.10": "M5b",
 	// 14-credentials §§9.1-9.6, 9.8-9.10 landed in M2; 9.7 in M1.
 	"19-deployment#9.4": "M7",
-	"19-deployment#9.5": "M4",
+	// M4 covers its second half offline (`PIUI_WORKSPACE_ROOTS` refuses a path outside the roots,
+	// server/test/integration/workspaces.test.ts). The first half — an *agent* run writing a file
+	// that lands on the host as uid 10001 — needs agent mode (M5) and a running container: M7.
+	"19-deployment#9.5": "M7",
 	"19-deployment#9.6": "M7",
 	"19-deployment#9.7": "M7",
 	// M3 ships the searxng provider and the compose `search` profile is wired, but "works end to

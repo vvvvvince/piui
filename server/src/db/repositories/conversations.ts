@@ -116,6 +116,36 @@ export class ConversationRepository extends Repository {
 		return this.get(principal, id)!;
 	}
 
+	/** spec/04-workspaces.md §4 — "2 active conversations in this workspace". */
+	countInWorkspace(principal: Principal, workspaceId: string): number {
+		const where = ownWhere(principal);
+		const row = this.db
+			.prepare(
+				`SELECT COUNT(*) AS n FROM conversations WHERE ${where.sql} AND workspace_id = ? AND archived = 0`,
+			)
+			.get(...where.params, workspaceId) as { n: number };
+		return row.n;
+	}
+
+	/** A conversation "started" once it has a pi session file (spec/04-workspaces.md §4). */
+	countStartedInWorkspace(workspaceId: string): number {
+		const row = this.db
+			.prepare(
+				"SELECT COUNT(*) AS n FROM conversations WHERE workspace_id = ? AND session_path IS NOT NULL",
+			)
+			.get(workspaceId) as { n: number };
+		return row.n;
+	}
+
+	/** Deleting a workspace keeps every transcript: `workspace_id` just becomes NULL (§6). */
+	detachWorkspace(workspaceId: string): number {
+		return this.db
+			.prepare(
+				"UPDATE conversations SET workspace_id = NULL, updated_at = ? WHERE workspace_id = ?",
+			)
+			.run(this.clock.nowIso(), workspaceId).changes;
+	}
+
 	setSessionPath(principal: Principal, id: string, sessionPath: string): void {
 		this.getOrThrow(principal, id);
 		this.db

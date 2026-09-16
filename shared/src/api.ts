@@ -7,6 +7,8 @@ import type {
 	ThinkingLevel,
 	ToolCatalogItem,
 	ToolDescriptor,
+	Workspace,
+	WorkspaceStatus,
 } from "./domain.js";
 import type { ConversationRuntimeState, UiMessage } from "./events.js";
 
@@ -35,6 +37,7 @@ export type ApiErrorCode =
 	| "path_denylisted"
 	| "path_already_registered"
 	| "path_escape"
+	| "binary_file"
 	| "skill_invalid"
 	| "tool_name_taken"
 	| "model_unavailable"
@@ -236,6 +239,82 @@ export interface SearchTestResult {
 export interface SearchTestResponse {
 	provider: string;
 	results: SearchTestResult[];
+}
+
+// -------------------------------------------------------------- workspaces
+// spec/09-api.md §5.
+
+export interface WorkspacesResponse {
+	items: Workspace[];
+}
+
+export interface CreateWorkspaceRequest {
+	name: string;
+	path: string;
+	description?: string;
+	/** mkdir the folder (recursive, 0o755) instead of requiring it to exist. */
+	create?: boolean;
+	gitInit?: boolean;
+}
+
+export interface PatchWorkspaceRequest {
+	name?: string;
+	description?: string;
+	path?: string;
+	trusted?: boolean;
+}
+
+export interface ValidatePathRequest {
+	path: string;
+	create?: boolean;
+}
+
+export interface ValidatePathResponse {
+	ok: true;
+	normalizedPath: string;
+	status: WorkspaceStatus;
+}
+
+export interface DeleteWorkspaceResponse {
+	affectedConversations: number;
+}
+
+export interface TreeEntry {
+	name: string;
+	kind: "file" | "dir" | "symlink";
+	size?: number;
+	modifiedAt: string;
+	hidden: boolean;
+}
+
+export interface WorkspaceTreeResponse {
+	path: string;
+	entries: TreeEntry[];
+	truncated: boolean;
+}
+
+export interface WorkspaceFileResponse {
+	path: string;
+	content: string;
+	size: number;
+	truncated: boolean;
+	language: string;
+}
+
+export interface WorkspaceGitResponse {
+	available: boolean;
+	branch?: string;
+	ahead?: number;
+	behind?: number;
+	dirtyCount?: number;
+	staged?: number;
+	lastCommit?: { hash: string; subject: string; at: string };
+}
+
+export interface FsBrowseResponse {
+	path: string;
+	parent: string | null;
+	dirs: string[];
 }
 
 // ----------------------------------------------------------- conversations

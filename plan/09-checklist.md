@@ -80,10 +80,10 @@ Rule for every line below: **failing test first**, then code, then refactor, com
 - [x] **Gate:** `07-chat-mode#6.{2,3}`, `05-skills-and-tools#B.5.{1,2}`
 
 ## M4 — workspaces
-- [ ] path validation (symlink resolution, denylist, roots, traversal) + error codes
-- [ ] create + `git init`, status probing, `validate`, tree/file/git, `fs/browse`
-- [ ] UI list/create/edit/delete, picker, file viewer, Missing state blocking prompts
-- [ ] **Gate:** `04-workspaces#7.1–7.6`
+- [x] path validation (symlink resolution, denylist, roots, traversal) + error codes
+- [x] create + `git init`, status probing, `validate`, tree/file/git, `fs/browse`
+- [x] UI list/create/edit/delete, picker, file viewer, Missing state blocking prompts
+- [x] **Gate:** `04-workspaces#7.1–7.6`
 
 ## M5 — profiles + agent mode
 - [ ] skills read path (scan + list)

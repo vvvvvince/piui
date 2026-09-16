@@ -7,6 +7,7 @@ import { LoginPage } from "./pages/LoginPage.js";
 import { PlaceholderPage } from "./pages/PlaceholderPage.js";
 import { ProvidersPage } from "./pages/ProvidersPage.js";
 import { ToolsPage } from "./pages/ToolsPage.js";
+import { WorkspacesPage } from "./pages/WorkspacesPage.js";
 
 export const routes: RouteObject[] = [
 	{ path: "/login", element: <LoginPage /> },
@@ -18,7 +19,7 @@ export const routes: RouteObject[] = [
 			{ path: "conversations", element: <ConversationsPage /> },
 			{ path: "c/:id", element: <ConversationPage /> },
 			{ path: "profiles", element: <PlaceholderPage title="Profiles" milestone="M5" /> },
-			{ path: "workspaces", element: <PlaceholderPage title="Workspaces" milestone="M4" /> },
+			{ path: "workspaces", element: <WorkspacesPage /> },
 			{ path: "skills", element: <PlaceholderPage title="Skills" milestone="M6" /> },
 			{ path: "tools", element: <ToolsPage /> },
 			{ path: "settings", element: <PlaceholderPage title="Settings" milestone="M7" /> },

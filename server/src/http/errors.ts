@@ -18,10 +18,13 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
 	path_denylisted: 403,
 	path_already_registered: 409,
 	path_escape: 400,
+	// spec/09-api.md §5: GET /api/workspaces/:id/file on a binary file.
+	binary_file: 415,
 	skill_invalid: 400,
 	tool_name_taken: 409,
 	model_unavailable: 400,
-	workspace_missing: 400,
+	// spec/04-workspaces.md §3: prompting into a workspace whose folder is gone.
+	workspace_missing: 409,
 	profile_not_found: 400,
 	conversation_busy: 409,
 	immutable_after_start: 409,

@@ -43,6 +43,8 @@ export function createTempHome(options: TempHomeOptions = {}): TempHome {
 		PIUI_HOME: home,
 		PIUI_SESSION_SECRET: "test-secret",
 		PIUI_PI_AUTH_PATH: join(home, "auth.json"),
+		// The "user" discovery source (spec/15 §3): never the real ~/.pi/agent in a test.
+		PIUI_USER_AGENT_DIR: join(home, "user-pi", "agent"),
 		PIUI_SEARCH_PROVIDER: "none",
 		NODE_ENV: "test",
 		...options.env,

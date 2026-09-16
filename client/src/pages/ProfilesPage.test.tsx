@@ -197,3 +197,52 @@ describe("ProfilesPage", () => {
 		expect(confirmSpy).not.toHaveBeenCalled();
 	});
 });
+
+// spec/15-commands-and-input.md §3.2 — the "Include all discovered skills" convenience.
+describe("discovered skills", () => {
+	const discovered = {
+		items: [
+			{
+				id: "s1",
+				dirName: "tui-skill",
+				name: "tui-skill",
+				description: "A skill discovered in ~/.pi/agent/skills.",
+				enabled: true,
+				source: "external",
+				location: "user",
+				path: "/home/u/.pi/agent/skills/tui-skill",
+				warnings: [],
+				usedByProfiles: 0,
+			},
+		],
+	};
+
+	it("[15-commands-and-input#6.9] shows the discovered count with its context cost and patches the flag", async () => {
+		const fetchMock = stubFetch((url) => {
+			if (url.includes("/api/profiles/p1/memory")) return ok(MEMORY);
+			if (url.includes("/api/profiles/p1"))
+				return ok({ ...DETAIL, includeDiscoveredSkills: false });
+			if (url.includes("/api/profiles")) return ok({ items: [PROFILE] });
+			if (url.includes("/api/skills")) return ok(discovered);
+			return ok(TOOLS);
+		});
+		renderPage();
+		await userEvent.click(await screen.findByRole("button", { name: /coding agent/i }));
+		await userEvent.click(await screen.findByRole("tab", { name: /^skills$/i }));
+
+		expect(screen.getByText(/user/i)).toBeInTheDocument();
+		const toggle = screen.getByLabelText(/include all discovered skills/i);
+		expect(screen.getByText(/1 discovered skill/i).textContent).toMatch(/~\d+ tokens/);
+
+		await userEvent.click(toggle);
+		await waitFor(() => {
+			const patch = fetchMock.mock.calls.find(
+				([, init]) => (init as RequestInit | undefined)?.method === "PATCH",
+			);
+			expect(patch).toBeDefined();
+			expect(JSON.parse((patch![1] as RequestInit).body as string)).toEqual({
+				includeDiscoveredSkills: true,
+			});
+		});
+	});
+});

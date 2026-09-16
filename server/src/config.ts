@@ -16,6 +16,12 @@ export interface Config {
 	readonly sessionSecret: string;
 	readonly sessionSecretProvided: boolean;
 	readonly agentDir: string;
+	/**
+	 * The *user's* pi agent dir (`~/.pi/agent`), read-only: its `prompts/` and `skills/` are
+	 * discovered like the TUI does (spec/15-commands-and-input.md §3). `PIUI_USER_AGENT_DIR`
+	 * redirects it, which is how tests avoid the real home.
+	 */
+	readonly userAgentDir: string;
 	readonly sessionsDir: string;
 	readonly piAuthPath: string;
 	readonly disableCredentialWrites: boolean;
@@ -163,6 +169,7 @@ export function parseConfig(env: Env = process.env): ParsedConfig {
 		sessionSecret: env.PIUI_SESSION_SECRET ?? randomSecret(),
 		sessionSecretProvided,
 		agentDir,
+		userAgentDir: resolve(expandHome(env.PIUI_USER_AGENT_DIR ?? join(homedir(), ".pi", "agent"))),
 		sessionsDir: join(agentDir, "sessions"),
 		piAuthPath: resolve(
 			expandHome(env.PIUI_PI_AUTH_PATH ?? join(homedir(), ".pi", "agent", "auth.json")),

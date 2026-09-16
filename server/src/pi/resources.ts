@@ -1,6 +1,7 @@
 // Per-conversation ResourceLoader + the chat system prompt.
 // spec/01-architecture.md §4.3 (spike plan/spikes/02), spec/07-chat-mode.md §2.
 import { DefaultResourceLoader, SettingsManager } from "@earendil-works/pi-coding-agent";
+import type { PiuiPromptTemplate } from "./prompts.js";
 
 export interface ChatPromptInput {
 	webSearch: boolean;
@@ -57,6 +58,11 @@ export interface ResourceLoaderInput {
 	/** Agent mode only; chat mode contributes none of these (spec/07-chat-mode.md §1). */
 	agentsFiles?: { path: string; content: string }[];
 	skills?: unknown[];
+	/**
+	 * The composed prompt templates (spec/15-commands-and-input.md §3.1), highest precedence
+	 * first — pi expands with `templates.find(…)` (spike plan/spikes/10 §3).
+	 */
+	prompts?: PiuiPromptTemplate[];
 }
 
 /**
@@ -81,7 +87,11 @@ export async function createResourceLoader(
 			? {}
 			: { systemPromptOverride: () => input.systemPrompt as string }),
 		skillsOverride: () => ({ skills: (input.skills ?? []) as never[], diagnostics: [] }),
-		promptsOverride: (base) => ({ prompts: [], diagnostics: base.diagnostics }),
+		// piui composes the three sources itself; pi's own discovery stays off (noPromptTemplates).
+		promptsOverride: (base) => ({
+			prompts: (input.prompts ?? []) as never[],
+			diagnostics: base.diagnostics,
+		}),
 		agentsFilesOverride: () => ({ agentsFiles: input.agentsFiles ?? [] }),
 	});
 	await loader.reload();

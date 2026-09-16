@@ -224,3 +224,56 @@ describe("WorkspacesPage", () => {
 		expect(await screen.findByRole("button", { name: /agent-wrote-this/ })).toBeInTheDocument();
 	});
 });
+
+// spec/15-commands-and-input.md §3.3 — workspace trust, as an in-app dialog (never confirm()).
+describe("workspace trust", () => {
+	const resources = {
+		hasPiDir: true,
+		prompts: ["component"],
+		skills: ["proj"],
+		extensions: ["evil"],
+		settings: true,
+		trusted: false,
+		trustDecidedAt: null,
+	};
+
+	it("[15-commands-and-input#6.8] prompts for trust on registration and lists what was found", async () => {
+		const calls = stubFetch((url, init) => {
+			if (url.endsWith("/project-resources")) return json(resources);
+			if (url.endsWith("/workspaces") && init?.method === "POST") return json(workspace, 201);
+			if (url.endsWith("/workspaces")) return json({ items: [workspace] });
+			if (url.includes("/workspaces/w1") && init?.method === "PATCH")
+				return json({ ...workspace, trusted: true });
+			return undefined;
+		});
+		renderPage();
+		await userEvent.click(await screen.findByRole("button", { name: /new workspace/i }));
+		await userEvent.type(screen.getByLabelText(/^name/i), "Demo");
+		await userEvent.type(screen.getByLabelText(/^folder/i), "/tmp/roots/demo");
+		await userEvent.click(screen.getByRole("button", { name: /^create$/i }));
+
+		const dialog = await screen.findByRole("dialog", { name: /trust/i });
+		expect(dialog.textContent).toContain("project-level pi resources");
+		expect(dialog.textContent).toContain("component");
+		expect(dialog.textContent).toContain("proj");
+		// trust must not overpromise: project extensions and settings are never loaded
+		expect(dialog.textContent).toMatch(/never loaded/i);
+
+		await userEvent.click(within(dialog).getByRole("button", { name: /^trust$/i }));
+		await waitFor(() =>
+			expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ trusted: true }),
+		);
+	});
+
+	it("[15-commands-and-input#6.8] offers a review affordance on an untrusted workspace with project resources", async () => {
+		stubFetch((url) => {
+			if (url.endsWith("/project-resources")) return json(resources);
+			if (url.endsWith("/workspaces")) return json({ items: [workspace] });
+			return undefined;
+		});
+		renderPage();
+		expect(
+			await screen.findByRole("button", { name: /project resources available/i }),
+		).toBeInTheDocument();
+	});
+});

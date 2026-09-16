@@ -155,6 +155,15 @@ export class ConversationRepository extends Repository {
 	}
 
 	/** Deleting a workspace keeps every transcript: `workspace_id` just becomes NULL (§6). */
+	/** Unscoped: a trust change must invalidate every session in the folder, whoever owns it. */
+	idsInWorkspace(workspaceId: string): string[] {
+		return (
+			this.db.prepare("SELECT id FROM conversations WHERE workspace_id = ?").all(workspaceId) as {
+				id: string;
+			}[]
+		).map((row) => row.id);
+	}
+
 	detachWorkspace(workspaceId: string): number {
 		return this.db
 			.prepare(

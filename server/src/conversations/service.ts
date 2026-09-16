@@ -137,6 +137,11 @@ export class ConversationService {
 		};
 	}
 
+	/** The authorized row, for routes that need the record rather than the DTO. */
+	rowFor(principal: Principal, id: string): ConversationRow {
+		return this.ctx.repos.conversations.getOrThrow(principal, id);
+	}
+
 	detail(row: ConversationRow): ConversationDetail {
 		const live = this.hub.peek(row.id);
 		return {
@@ -382,6 +387,9 @@ export class ConversationService {
 				// Agent mode keeps pi's own prompt (spec/03-profiles.md §2, spike plan/spikes/09).
 				...(agent ? {} : { systemPrompt: this.systemPromptFor(row) }),
 				tools: toolNames,
+				// spec/15-commands-and-input.md §3.1 — chat mode gets the two global sources, agent
+				// mode adds the project ones when the workspace is trusted.
+				prompts: this.services.commands.prompts(row.workspace_id).templates,
 				...(customTools.length > 0 ? { customTools } : {}),
 				...(agent ? { agentsFiles: agent.agentsFiles, skills: agent.skills } : {}),
 			},

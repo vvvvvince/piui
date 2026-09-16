@@ -112,6 +112,10 @@ export class LiveSession {
 	private flushTimer: NodeJS.Timeout | undefined;
 	private runTimer: NodeJS.Timeout | undefined;
 	private toolCallsThisRun = 0;
+	/** Typed `/command` texts whose expansion pi has not produced yet. */
+	private readonly pendingTyped: string[] = [];
+	/** Expanded text -> what the user typed, so a snapshot keeps the echo. */
+	private readonly echoes = new Map<string, { typed: string; expandedChars: number }>();
 	lastActivityMs: number;
 
 	constructor(
@@ -152,10 +156,35 @@ export class LiveSession {
 	}
 
 	messages(): UiMessage[] {
-		const messages = projectTranscript(this.session.messages, this.ids);
+		const messages = projectTranscript(this.session.messages, this.ids).map((message) =>
+			this.withEcho(message),
+		);
 		const partial = this.projector.partial;
 		if (partial && !messages.some((m) => m.id === partial.id)) messages.push(partial);
 		return messages;
+	}
+
+	/**
+	 * spec/15-commands-and-input.md §1.3 — the transcript renders the **typed** command with a
+	 * "show expanded" disclosure. piui never expands anything itself: it remembers what was typed
+	 * and compares it with the user message pi produced.
+	 */
+	noteTyped(text: string): void {
+		if (text.startsWith("/")) this.pendingTyped.push(text);
+	}
+
+	private withEcho(message: UiMessage): UiMessage {
+		if (message.role !== "user" || message.commandEcho) return message;
+		const text = message.blocks.map((b) => (b.type === "text" ? b.text : "")).join("");
+		let echo = this.echoes.get(text);
+		if (!echo && this.pendingTyped.length > 0) {
+			const typed = this.pendingTyped.shift()!;
+			if (typed !== text) {
+				echo = { typed, expandedChars: text.length };
+				this.echoes.set(text, echo);
+			}
+		}
+		return echo ? { ...message, commandEcho: echo } : message;
 	}
 
 	snapshot(): UiEvent {
@@ -181,7 +210,14 @@ export class LiveSession {
 
 	private ingest(event: { type: string; [key: string]: unknown }): void {
 		this.lastActivityMs = this.deps.nowMs();
-		for (const projected of this.projector.ingest(event)) this.emit(projected);
+		for (const projected of this.projector.ingest(event)) {
+			const message = "message" in projected ? projected.message : undefined;
+			this.emit(
+				typeof message === "object" && message !== null
+					? ({ ...projected, message: this.withEcho(message) } as ProjectedEvent)
+					: projected,
+			);
+		}
 
 		switch (event.type) {
 			case "tool_execution_start":
@@ -355,6 +391,7 @@ export class SessionHub {
 		streamingBehavior?: "steer" | "followUp",
 	): Promise<"steer" | "followUp" | null> {
 		const live = await this.ensure(conversationId);
+		live.noteTyped(text);
 		if (live.session.isStreaming) {
 			if (!streamingBehavior) {
 				throw new ApiError(
@@ -416,6 +453,11 @@ export class SessionHub {
 		if (!live) return;
 		live.dispose();
 		this.sessions.delete(conversationId);
+	}
+
+	/** Every session is stale (a prompt-template rescan): subscribers stay attached. */
+	dropAll(): void {
+		for (const id of [...this.sessions.keys()]) this.drop(id);
 	}
 
 	/** The conversation is gone: drop the session *and* its channel. */

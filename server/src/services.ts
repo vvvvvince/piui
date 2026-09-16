@@ -1,6 +1,7 @@
 // Everything that lives for the whole process and is shared by routes: the pi model runtime
 // and the services built on it. Created by buildServer, disposed on shutdown.
 
+import { CommandService } from "./commands/service.js";
 import type { AppContext } from "./context.js";
 import { ConversationService } from "./conversations/service.js";
 import { installedBuiltinToolNames } from "./pi/builtin-tools.js";
@@ -25,6 +26,8 @@ export interface Services {
 	events: GlobalEventBus;
 	hub: SessionHub;
 	conversations: ConversationService;
+	/** The `/` command surface and prompt-template composition (spec/15 §§1-3). */
+	commands: CommandService;
 	profiles: ProfileService;
 	skills: SkillCatalog;
 	/** The per-profile memory file store; owns the append mutex. */
@@ -94,7 +97,21 @@ export async function createServices(ctx: AppContext): Promise<Services> {
 		profiles,
 		skills,
 		memory,
-		workspaces: new WorkspaceService(ctx),
+		workspaces: new WorkspaceService(ctx, {
+			onTrustChanged: (workspaceId) => {
+				for (const id of ctx.repos.conversations.idsInWorkspace(workspaceId)) hub.drop(id);
+				events.emit({ type: "skills_changed" });
+			},
+		}),
+		commands: new CommandService(ctx, {
+			skills,
+			profiles,
+			// A rescan changes what every session's ResourceLoader holds.
+			onRescan: () => {
+				hub.dropAll();
+				events.emit({ type: "skills_changed" });
+			},
+		}),
 		createWebToolSet: () =>
 			createWebTools({
 				provider: search,

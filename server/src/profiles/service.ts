@@ -42,6 +42,8 @@ export interface ResolvedProfile {
 	/** The union handed to pi as the allowlist (spike plan/spikes/08). */
 	toolNames: string[];
 	memory: { enabled: boolean; path: string; injectedBytes: number; sizeBytes: number };
+	/** How many skills "Include all discovered skills" added (spec/15 §3.2, 0 when off). */
+	discoveredSkillCount: number;
 	warnings: string[];
 }
 
@@ -92,6 +94,9 @@ export class ProfileService {
 			...(body.description === undefined ? {} : { description: body.description }),
 			memoryEnabled: body.memory?.enabled === true,
 			memoryPath: body.memory?.path ?? null,
+			...(body.includeDiscoveredSkills === undefined
+				? {}
+				: { includeDiscoveredSkills: body.includeDiscoveredSkills }),
 			...(body.defaults?.provider && body.defaults.modelId
 				? { defaultModel: `${body.defaults.provider}/${body.defaults.modelId}` }
 				: {}),
@@ -112,6 +117,9 @@ export class ProfileService {
 			...(body.memory === undefined
 				? {}
 				: { memoryEnabled: body.memory.enabled, memoryPath: body.memory.path ?? null }),
+			...(body.includeDiscoveredSkills === undefined
+				? {}
+				: { includeDiscoveredSkills: body.includeDiscoveredSkills }),
 			...(body.defaults === undefined
 				? {}
 				: {
@@ -251,8 +259,13 @@ export class ProfileService {
 		if (!row) throw new ApiError("profile_not_found", `No profile ${profileId}.`);
 		const warnings: string[] = [];
 
-		const skillIds = this.ctx.repos.skills.skillIdsOfProfile(row.id);
-		const skills = this.deps.skills.resolve(skillIds);
+		const selected = this.ctx.repos.skills.skillIdsOfProfile(row.id);
+		// spec/15-commands-and-input.md §3.2 — the TUI-parity convenience: every discovered skill.
+		const discovered =
+			row.include_discovered_skills === 1
+				? this.deps.skills.discoveredSkillIds().filter((id) => !selected.includes(id))
+				: [];
+		const skills = this.deps.skills.resolve([...selected, ...discovered]);
 		warnings.push(...skills.warnings);
 
 		const memoryEnabled = row.memory_enabled === 1;
@@ -295,6 +308,7 @@ export class ProfileService {
 			customToolNames: tools.customToolNames,
 			toolNames: tools.toolNames,
 			memory: { enabled: memoryEnabled, path: memoryPath, injectedBytes, sizeBytes },
+			discoveredSkillCount: discovered.length,
 			warnings,
 		};
 	}
@@ -361,6 +375,7 @@ export class ProfileService {
 				path: row.memory_path,
 				sizeBytes: this.memory.stat(this.memoryPath(row)).sizeBytes,
 			},
+			includeDiscoveredSkills: row.include_discovered_skills === 1,
 			...(row.default_model || row.default_thinking
 				? {
 						defaults: {

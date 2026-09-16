@@ -88,6 +88,28 @@ describe("Composer", () => {
 		window.localStorage.clear();
 	});
 
+	it("[15-commands-and-input#6.6] Enter steers, Alt+Enter queues, Alt+Up dequeues and Esc restores", async () => {
+		const user = userEvent.setup();
+		const restored = vi.fn().mockResolvedValue("steered\n\nqueued");
+		const { handlers, textarea } = setup(true, {
+			onDequeue: vi.fn().mockResolvedValue("steered\n\nqueued"),
+			onAbort: restored,
+		});
+		await user.click(textarea);
+		await user.keyboard("steered{Enter}");
+		expect(handlers.onSteer).toHaveBeenCalledWith("steered");
+		await user.keyboard("queued{Alt>}{Enter}{/Alt}");
+		expect(handlers.onFollowUp).toHaveBeenCalledWith("queued");
+
+		await user.keyboard("{Alt>}{ArrowUp}{/Alt}");
+		expect(textarea.value).toBe("steered\n\nqueued");
+
+		await user.clear(textarea);
+		await user.keyboard("{Escape}");
+		expect(restored).toHaveBeenCalled();
+		expect(textarea.value).toBe("steered\n\nqueued");
+	});
+
 	it("[15-commands-and-input#4.3] exposes every rebound key from the UI as well", () => {
 		setup(true);
 		// Stop button (Esc) and the queue hint are visible while streaming

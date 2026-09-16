@@ -155,6 +155,8 @@ export interface ConversationStream extends StreamState {
 }
 
 const MAX_BACKOFF_MS = 10_000;
+/** rAF never fires in a background tab; flush at least this often anyway. */
+const BACKGROUND_FLUSH_MS = 250;
 
 export function useConversationStream(conversationId: string | undefined): ConversationStream {
 	const [stream, setStream] = useState<StreamState>(emptyStreamState);
@@ -182,12 +184,21 @@ export function useConversationStream(conversationId: string | undefined): Conve
 			if (batch.length === 0) return;
 			setStream((current) => batch.reduce(applyEvent, current));
 		};
+		let fallback: ReturnType<typeof setTimeout> | undefined;
+		const run = (): void => {
+			if (fallback) clearTimeout(fallback);
+			fallback = undefined;
+			flush();
+		};
 		const schedule = (): void => {
 			if (frame.current !== undefined) return;
 			frame.current =
 				typeof requestAnimationFrame === "function"
-					? requestAnimationFrame(flush)
-					: (setTimeout(flush, 30) as unknown as number);
+					? requestAnimationFrame(run)
+					: (setTimeout(run, 30) as unknown as number);
+			// A hidden or background tab gets no animation frames at all, which froze the
+			// transcript until the tab was focused again (found in the browser, M5b).
+			fallback = setTimeout(run, BACKGROUND_FLUSH_MS);
 		};
 
 		const connect = (): void => {
@@ -222,6 +233,7 @@ export function useConversationStream(conversationId: string | undefined): Conve
 
 		return () => {
 			closed = true;
+			if (fallback) clearTimeout(fallback);
 			if (retryTimer) clearTimeout(retryTimer);
 			source?.close();
 			setConnected(false);

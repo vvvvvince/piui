@@ -23,6 +23,7 @@ const PROFILE_BODY = {
 		agentsMd: { type: "string" },
 		skillIds: { type: "array", items: { type: "string" } },
 		toolNames: { type: "array", items: { type: "string" } },
+		includeDiscoveredSkills: { type: "boolean" },
 		memory: {
 			type: "object",
 			additionalProperties: false,

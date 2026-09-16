@@ -162,6 +162,13 @@ function ProfileEditor({
 	});
 	const tools = useQuery({ queryKey: ["tools"], queryFn: api.tools });
 	const skills = useQuery({ queryKey: ["skills"], queryFn: api.skills });
+	// spec/15-commands-and-input.md §3.2 — the visible price of TUI parity. pi loads every
+	// discovered skill's name + description into every request; ~4 chars per token.
+	const discoveredSkills = (skills.data?.items ?? []).filter((s) => s.source === "external");
+	const discoveredCount = discoveredSkills.length;
+	const discoveredTokens = Math.ceil(
+		discoveredSkills.reduce((sum, s) => sum + s.name.length + s.description.length + 20, 0) / 4,
+	);
 
 	// The file on disk wins, so the editor starts from what the server just read (§2).
 	useEffect(() => {
@@ -337,11 +344,32 @@ function ProfileEditor({
 							/>
 							<label htmlFor={`skill-${skill.id}`}>
 								<span className="font-mono text-xs">{skill.name}</span>{" "}
+								{skill.location && (
+									<span className="rounded bg-slate-800 px-1 text-[10px] text-slate-400">
+										{skill.location}
+									</span>
+								)}{" "}
 								<span className="text-slate-400">{skill.description}</span>
 								{skill.missing && <span className="text-amber-400"> (missing on disk)</span>}
 							</label>
 						</li>
 					))}
+					<li className="mt-2 flex items-start gap-2 border-t border-slate-800 pt-2 text-sm">
+						<input
+							id="include-discovered"
+							type="checkbox"
+							checked={detail.includeDiscoveredSkills === true}
+							onChange={(event) => save.mutate({ includeDiscoveredSkills: event.target.checked })}
+						/>
+						<label htmlFor="include-discovered">
+							Include all discovered skills
+							<span className="block text-xs text-slate-400">
+								{discoveredCount} discovered skill{discoveredCount === 1 ? "" : "s"} from
+								~/.pi/agent/skills and trusted workspaces — ~{discoveredTokens} tokens of system
+								prompt when enabled (pi's TUI always loads them).
+							</span>
+						</label>
+					</li>
 					{(skills.data?.items.length ?? 0) === 0 && (
 						<li className="text-sm text-slate-400">
 							No skills yet — drop a folder with a SKILL.md into ~/.piui/skills.

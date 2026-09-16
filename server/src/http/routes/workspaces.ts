@@ -5,6 +5,7 @@ import type {
 	DeleteWorkspaceResponse,
 	FsBrowseResponse,
 	PatchWorkspaceRequest,
+	ProjectResourcesResponse,
 	ValidatePathRequest,
 	ValidatePathResponse,
 	Workspace,
@@ -13,6 +14,7 @@ import type {
 	WorkspacesResponse,
 	WorkspaceTreeResponse,
 } from "@piui/shared";
+import type { CommandService } from "../../commands/service.js";
 import type { WorkspaceService } from "../../workspaces/service.js";
 import type { PiuiFastify } from "../auth.js";
 import { ApiError } from "../errors.js";
@@ -24,6 +26,7 @@ const PATH = { type: "string", minLength: 1, maxLength: 4096 } as const;
 export async function registerWorkspaceRoutes(
 	app: PiuiFastify,
 	workspaces: WorkspaceService,
+	commands: CommandService,
 ): Promise<void> {
 	app.get("/api/workspaces", async (req): Promise<WorkspacesResponse> => {
 		return { items: workspaces.list(req.principal!) };
@@ -98,6 +101,16 @@ export async function registerWorkspaceRoutes(
 		"/api/workspaces/:id",
 		async (req): Promise<DeleteWorkspaceResponse> =>
 			workspaces.delete(req.principal!, req.params.id),
+	);
+
+	// spec/15-commands-and-input.md §3.3 — what trusting this folder would load.
+	app.get<{ Params: { id: string } }>(
+		"/api/workspaces/:id/project-resources",
+		async (req): Promise<ProjectResourcesResponse> => {
+			// Authorization first: an invisible workspace must 404 before anything is read.
+			workspaces.get(req.principal!, req.params.id);
+			return commands.projectResources(req.params.id);
+		},
 	);
 
 	app.get<{ Params: { id: string }; Querystring: { path?: string; depth?: string } }>(

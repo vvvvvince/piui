@@ -229,12 +229,122 @@ function DeleteDialog({
 	);
 }
 
+/**
+ * spec/15-commands-and-input.md §3.3 — pi's `/trust` prompt, as an in-app dialog (never
+ * `window.confirm`: a native modal freezes the tab). It must not overpromise: project
+ * `.pi/settings.json` and `.pi/extensions` are never loaded, trusted or not (decision Q3).
+ */
+function TrustDialog({
+	workspace,
+	onDecide,
+	onCancel,
+}: {
+	workspace: Workspace;
+	onDecide: (trusted: boolean) => void;
+	onCancel: () => void;
+}): JSX.Element {
+	const resources = useQuery({
+		queryKey: ["project-resources", workspace.id],
+		queryFn: () => api.projectResources(workspace.id),
+	});
+	const found = resources.data;
+	return (
+		<div className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 p-4">
+			<div
+				role="dialog"
+				aria-label={`Trust ${workspace.name}?`}
+				className="w-full max-w-md rounded bg-slate-900 p-4 text-sm"
+			>
+				<h2 className="font-semibold">Trust “{workspace.name}”?</h2>
+				<p className="mt-2 text-slate-300">
+					This folder contains project-level pi resources. Trust it to load its prompt templates and
+					skills?
+				</p>
+				<p className="mt-1 font-mono text-xs text-slate-500">{workspace.path}</p>
+				{found && (
+					<ul className="mt-2 space-y-0.5 text-xs text-slate-300">
+						{found.prompts.length > 0 && (
+							<li>
+								Prompt templates: <span className="font-mono">{found.prompts.join(", ")}</span>
+							</li>
+						)}
+						{found.skills.length > 0 && (
+							<li>
+								Skills: <span className="font-mono">{found.skills.join(", ")}</span>
+							</li>
+						)}
+						{(found.extensions.length > 0 || found.settings) && (
+							<li className="text-amber-300">
+								Project settings and extensions are <strong>never loaded</strong> by piui, trusted
+								or not.
+							</li>
+						)}
+					</ul>
+				)}
+				<div className="mt-4 flex justify-end gap-2">
+					<button type="button" className="rounded px-3 py-1 text-xs" onClick={onCancel}>
+						Decide later
+					</button>
+					<button
+						type="button"
+						className="rounded bg-slate-700 px-3 py-1 text-xs"
+						onClick={() => onDecide(false)}
+					>
+						Don’t trust
+					</button>
+					<button
+						type="button"
+						className="rounded bg-sky-600 px-3 py-1 text-xs"
+						onClick={() => onDecide(true)}
+					>
+						Trust
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/** The card affordance: "project resources available — review" on an untrusted workspace. */
+function TrustBadge({
+	workspace,
+	onReview,
+}: {
+	workspace: Workspace;
+	onReview: () => void;
+}): JSX.Element | null {
+	const resources = useQuery({
+		queryKey: ["project-resources", workspace.id],
+		queryFn: () => api.projectResources(workspace.id),
+		enabled: workspace.status.exists,
+	});
+	const found = resources.data;
+	if (!found?.hasPiDir) return null;
+	if (workspace.trusted) {
+		return (
+			<button
+				type="button"
+				className="text-[11px] text-emerald-300 hover:underline"
+				onClick={onReview}
+			>
+				trusted — project prompts and skills load
+			</button>
+		);
+	}
+	return (
+		<button type="button" className="text-[11px] text-amber-300 hover:underline" onClick={onReview}>
+			project resources available — review
+		</button>
+	);
+}
+
 export function WorkspacesPage(): JSX.Element {
 	const queryClient = useQueryClient();
 	const workspaces = useQuery({ queryKey: ["workspaces"], queryFn: api.workspaces });
 	const [creating, setCreating] = useState(false);
 	const [editing, setEditing] = useState<Workspace | null>(null);
 	const [deleting, setDeleting] = useState<Workspace | null>(null);
+	const [trusting, setTrusting] = useState<Workspace | null>(null);
 	const [openFiles, setOpenFiles] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
@@ -250,10 +360,19 @@ export function WorkspacesPage(): JSX.Element {
 				...(form.create ? { create: true } : {}),
 				...(form.gitInit ? { gitInit: true } : {}),
 			}),
-		onSuccess: () => {
+		onSuccess: (created) => {
 			setError(null);
 			setCreating(false);
 			invalidate();
+			// spec §3.3: the trust question is asked at registration, while the user is here.
+			void api
+				.projectResources(created.id)
+				.then((found) => {
+					if (found.hasPiDir) setTrusting(created);
+				})
+				.catch(() => {
+					/* a folder we cannot read simply has nothing to trust */
+				});
 		},
 		onError: (err) => setError((err as ApiClientError).message),
 	});
@@ -267,6 +386,15 @@ export function WorkspacesPage(): JSX.Element {
 		onSuccess: () => {
 			setError(null);
 			setEditing(null);
+			invalidate();
+		},
+		onError: (err) => setError((err as ApiClientError).message),
+	});
+	const setTrusted = useMutation({
+		mutationFn: (input: { id: string; trusted: boolean }) =>
+			api.patchWorkspace(input.id, { trusted: input.trusted }),
+		onSuccess: () => {
+			setTrusting(null);
 			invalidate();
 		},
 		onError: (err) => setError((err as ApiClientError).message),
@@ -372,6 +500,7 @@ export function WorkspacesPage(): JSX.Element {
 							</span>
 						</div>
 						<p className="font-mono text-xs text-slate-400">{workspace.path}</p>
+						<TrustBadge workspace={workspace} onReview={() => setTrusting(workspace)} />
 						{workspace.description && (
 							<p className="text-xs text-slate-400">{workspace.description}</p>
 						)}
@@ -394,6 +523,14 @@ export function WorkspacesPage(): JSX.Element {
 					</li>
 				))}
 			</ul>
+
+			{trusting && (
+				<TrustDialog
+					workspace={trusting}
+					onCancel={() => setTrusting(null)}
+					onDecide={(trusted) => setTrusted.mutate({ id: trusting.id, trusted })}
+				/>
+			)}
 
 			{creating && (
 				<WorkspaceDialog

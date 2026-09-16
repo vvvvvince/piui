@@ -26,7 +26,7 @@ Rule for every line below: **failing test first**, then code, then refactor, com
 - [x] S5 session `.jsonl` + `SessionManager`
 - [x] S6 credentials / `AuthFlow` surface (`plan/spikes/06-credentials-and-auth-flow.md`)
 - [x] S7 steer / followUp / abort / preflight (typings verified; behavior re-checked in M2)
-- [ ] S8 skill commands + prompt templates (M5b)
+- [x] S8 skill commands + prompt templates (`plan/spikes/10`)
 - [ ] S9 `bindExtensions` + `additionalExtensionPaths` (M5c)
 - [x] S10 `defineTool` + injectable fetch · S11 built-in tool names · S12 usage/cost accessors
 - [x] S9 built-in tools for real: names, params, `tool_execution_*` payloads (`plan/spikes/09`)
@@ -98,12 +98,13 @@ Rule for every line below: **failing test first**, then code, then refactor, com
 - [x] **Gate:** `03-profiles#8`, `17-memory#7`, `08-agent-mode#8`
 
 ## M5b — commands
-- [ ] `/commands`, `/api/prompts` (+ rescan), template composition & precedence
-- [ ] `enableSkillCommands`, `/skill:<name>`, `SlashMenu`, unknown-command refusal
-- [ ] routing table, `commandEcho` + show-expanded
-- [ ] discovered skills as `external`, `includeDiscoveredSkills`
-- [ ] workspace trust column + project-resources route + dialog
-- [ ] **Gate:** `15-commands-and-input#6.1–6.10`
+- [x] `/commands`, `/api/prompts` (+ rescan), template composition & precedence
+- [x] `enableSkillCommands`, `/skill:<name>`, `SlashMenu`, unknown-command refusal
+- [x] routing table, `commandEcho` + show-expanded
+- [x] discovered skills as `external`, `includeDiscoveredSkills`
+- [x] workspace trust column + project-resources route + dialog
+- [x] Alt+T / Alt+O collapse toggles + `/hotkeys` parity; `/settings` prompt sources + Rescan
+- [x] **Gate:** `15-commands-and-input#6.1–6.10`
 
 ## M5c — extensions
 - [ ] probe enumeration, registry refresh, `extensions_changed`

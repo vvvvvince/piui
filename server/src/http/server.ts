@@ -13,6 +13,7 @@ import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerGlobalEventRoutes } from "./routes/events.js";
 import { registerModelRoutes } from "./routes/models.js";
 import { registerProfileRoutes } from "./routes/profiles.js";
+import { registerPromptRoutes } from "./routes/prompts.js";
 import { registerProviderRoutes } from "./routes/providers.js";
 import { registerToolRoutes } from "./routes/tools.js";
 import { registerWorkspaceRoutes } from "./routes/workspaces.js";
@@ -149,9 +150,10 @@ export async function buildServer(ctx: AppContext, injected?: Services) {
 	await registerModelRoutes(app, services);
 	await registerGlobalEventRoutes(app, services);
 	await registerToolRoutes(app, ctx, services);
-	await registerWorkspaceRoutes(app, services.workspaces);
+	await registerWorkspaceRoutes(app, services.workspaces, services.commands);
 	await registerProfileRoutes(app, services.profiles, services.skills);
-	await registerConversationRoutes(app, services.conversations, services.hub);
+	await registerConversationRoutes(app, services.conversations, services.hub, services.commands);
+	await registerPromptRoutes(app, services.commands);
 
 	if (ctx.serveClient && existsSync(join(config.clientDist, "index.html"))) {
 		await app.register(fastifyStatic, { root: config.clientDist, prefix: "/" });

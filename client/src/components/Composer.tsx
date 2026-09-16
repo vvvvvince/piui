@@ -1,4 +1,6 @@
-// The composer with pi TUI input semantics (spec/15-commands-and-input.md §4, normative).
+// The composer with pi TUI input semantics (spec/15-commands-and-input.md §4, normative) and
+// the `/` command surface (§§1.2, 2).
+import type { CommandDescriptor } from "@piui/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface ComposerHandlers {
@@ -17,6 +19,10 @@ export interface ComposerProps {
 	conversationId: string;
 	disabled?: boolean;
 	disabledReason?: string;
+	/** The conversation's command surface (`GET /conversations/:id/commands`). */
+	commands?: CommandDescriptor[];
+	/** Executes a `client` / `server` command; `expand` commands go to the model unchanged. */
+	onCommand?(command: CommandDescriptor, args: string): void;
 	/** Rendered next to the hint row (globe toggle, model chip, …). */
 	children?: React.ReactNode;
 }
@@ -49,17 +55,50 @@ const appendBelow = (current: string, restored: string): string => {
 	return current.trim().length > 0 ? `${current}\n\n${restored}` : restored;
 };
 
+/** The token the `/` menu filters on: only while the first word is still being typed. */
+export function commandPrefix(text: string): string | null {
+	const match = /^\/([^\s]*)$/.exec(text);
+	return match ? match[1]! : null;
+}
+
+const splitCommand = (text: string): { name: string; args: string } => {
+	const trimmed = text.trimEnd();
+	const space = trimmed.indexOf(" ");
+	return space === -1
+		? { name: trimmed.slice(1), args: "" }
+		: { name: trimmed.slice(1, space), args: trimmed.slice(space + 1).trim() };
+};
+
 export function Composer({
 	streaming,
 	handlers,
 	conversationId,
 	disabled,
 	disabledReason,
+	commands,
+	onCommand,
 	children,
 }: ComposerProps): JSX.Element {
 	const [text, setText] = useState("");
 	const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+	const [menuClosed, setMenuClosed] = useState(false);
+	const [highlight, setHighlight] = useState(0);
+	const [error, setError] = useState<string | null>(null);
 	const ref = useRef<HTMLTextAreaElement>(null);
+
+	const prefix = commandPrefix(text);
+	const matches =
+		prefix === null || !commands
+			? []
+			: commands.filter((command) => command.name.toLowerCase().includes(prefix.toLowerCase()));
+	const menuOpen = !menuClosed && matches.length > 0;
+	const selected = matches[Math.min(highlight, matches.length - 1)];
+
+	const complete = (command: CommandDescriptor): void => {
+		setText(`/${command.name} `);
+		setMenuClosed(true);
+		setError(null);
+	};
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset only on conversation switch
 	useEffect(() => {
@@ -71,6 +110,27 @@ export function Composer({
 		(mode: "send" | "steer" | "followUp") => {
 			const value = text.trim();
 			if (value.length === 0) return;
+			// spec §2 — the routing table. An unknown `/word` is never sent as a prompt.
+			if (value.startsWith("/") && commands) {
+				const { name, args } = splitCommand(value);
+				const command = commands.find((candidate) => candidate.name === name);
+				if (!command) {
+					setError(`Unknown command \`/${name}\`. Type \`/\` to see available commands.`);
+					return;
+				}
+				if (streaming && !command.availableWhileStreaming) {
+					setError(`\`/${name}\` is not available while the agent is running.`);
+					return;
+				}
+				if (command.kind !== "expand") {
+					pushHistory(conversationId, value);
+					setText("");
+					setError(null);
+					onCommand?.(command, args);
+					return;
+				}
+			}
+			setError(null);
 			pushHistory(conversationId, value);
 			setText("");
 			setHistoryIndex(null);
@@ -78,11 +138,30 @@ export function Composer({
 			else if (mode === "steer") handlers.onSteer(value);
 			else handlers.onFollowUp(value);
 		},
-		[text, conversationId, handlers],
+		[text, conversationId, handlers, commands, onCommand, streaming],
 	);
 
 	const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>): void => {
 		const area = event.currentTarget;
+		// The dropdown swallows keys first — exactly pi's precedence (spec §4.2).
+		if (menuOpen && selected) {
+			if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+				event.preventDefault();
+				const delta = event.key === "ArrowDown" ? 1 : -1;
+				setHighlight((current) => (current + delta + matches.length) % matches.length);
+				return;
+			}
+			if (event.key === "Tab" || event.key === "Enter") {
+				event.preventDefault();
+				complete(selected);
+				return;
+			}
+			if (event.key === "Escape") {
+				event.preventDefault();
+				setMenuClosed(true);
+				return;
+			}
+		}
 		if (event.key === "Enter" && event.altKey) {
 			event.preventDefault();
 			submit(streaming ? "followUp" : "send");
@@ -147,6 +226,47 @@ export function Composer({
 
 	return (
 		<div className="border-t border-slate-800 bg-slate-900/60 p-3">
+			{menuOpen && (
+				<div
+					role="listbox"
+					aria-label="Commands"
+					className="mb-2 max-h-64 overflow-y-auto rounded border border-slate-700 bg-slate-950 text-sm"
+				>
+					{matches.map((command, index) => (
+						<button
+							key={command.name}
+							role="option"
+							aria-selected={command === selected}
+							data-command={command.name}
+							type="button"
+							className={`flex w-full items-baseline gap-2 px-2 py-1 text-left ${
+								command === selected ? "bg-slate-800" : ""
+							}`}
+							onMouseEnter={() => setHighlight(index)}
+							onClick={() => {
+								complete(command);
+								ref.current?.focus();
+							}}
+						>
+							<span className="font-mono text-slate-200">{command.display}</span>
+							{command.argumentHint && (
+								<span className="font-mono text-xs text-slate-500">{command.argumentHint}</span>
+							)}
+							<span className="truncate text-xs text-slate-400">— {command.description}</span>
+							{command.location && (
+								<span className="ml-auto rounded bg-slate-800 px-1 text-[10px] text-slate-400">
+									{command.location}
+								</span>
+							)}
+						</button>
+					))}
+				</div>
+			)}
+			{error && (
+				<p role="alert" className="mb-2 text-xs text-rose-300">
+					{error}
+				</p>
+			)}
 			<div className="flex items-end gap-2">
 				<textarea
 					ref={ref}
@@ -156,7 +276,12 @@ export function Composer({
 					value={text}
 					disabled={disabled === true}
 					spellCheck={false}
-					onChange={(event) => setText(event.target.value)}
+					onChange={(event) => {
+						setText(event.target.value);
+						setHighlight(0);
+						setMenuClosed(false);
+						setError(null);
+					}}
 					onKeyDown={onKeyDown}
 				/>
 				{streaming ? (

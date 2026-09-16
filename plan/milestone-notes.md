@@ -693,3 +693,152 @@ and `repository scoping > keeps workspaces scoped the same way` failed by name (
 - The `UserMenu` popover does not close on an outside click and can overlap the profile-editor
   action buttons (seen in the browser, pre-existing since M1). One-line fix whenever M6 touches
   the shell.
+
+---
+
+## M5b — Slash commands, prompt templates, discovery, workspace trust ✅
+
+**Shipped**
+
+- *Spike S10* (`plan/spikes/10-prompt-templates-and-skill-commands.md`) before the command
+  surface. Four facts drove the design: `promptsOverride` only needs pi's `PromptTemplate`
+  shape; `expandPromptTemplate` takes the **first** name match, so the composed array must be
+  ordered highest-precedence-first; `prompt()`/`steer()`/`followUp()` expand by default, so piui
+  passes the typed text through untouched; and `enableSkillCommands` does **not** gate
+  `_expandSkillCommand` — it only drives pi's TUI autocomplete.
+- `server/src/pi/prompts.ts` — discovery + composition of `$PIUI_HOME/prompts` <
+  `~/.pi/agent/prompts` < trusted `<workspace>/.pi/prompts`: non-recursive `*.md`, frontmatter
+  `description` / `argument-hint`, pi's first-line fallback truncated at 60 chars, shadowing
+  recorded per template. Pure and unit-tested; it contains **no** substitution grammar.
+- `server/src/commands/service.ts` — the eleven built-ins that have a target in this build,
+  `/skill:<name>` from the conversation's resolved profile, templates with their `location`
+  badge, `GET /api/prompts`, `POST /api/prompts/rescan` (admin-only through the existing
+  `*/rescan` matcher) and `GET /api/workspaces/:id/project-resources`.
+- `GET /api/conversations/:id/commands`, and the composed set handed to pi through
+  `createResourceLoader({ prompts })` — the M5 `promptsOverride: () => ({ prompts: [] })` now
+  delivers the real set.
+- Skill discovery (`skills/catalog.ts`): `~/.pi/agent/skills`, `~/.agents/skills` and, for
+  trusted workspaces, `<ws>/.pi/skills` + `<ws>/.agents/skills` are registered as
+  `source: "external"` with a `location` badge, never auto-enabled. `profiles.resolve()` honours
+  `includeDiscoveredSkills` and reports `discoveredSkillCount`.
+- `commandEcho`: `SessionHub.prompt` records the typed `/…` text, `LiveSession` pairs it with the
+  user message **pi produced** and decorates both the live events and the snapshot. The client
+  renders the typed command with a `show expanded (N chars)` disclosure.
+- Client: `SlashMenu` inside the composer (filter, `Tab`/`Enter` complete, `Esc` closes before
+  `Esc` aborts, `argument-hint` + `location` rendering), the routing table
+  (`client`/`server`/`expand` + `availableWhileStreaming`), the inline refusal of an unknown
+  `/word`, `Alt+T`/`Alt+O` collapse-all toggles (with buttons next to them), the workspace trust
+  dialog (in-app, never `window.confirm`) + the "project resources available — review" badge,
+  the profile editor's *Include all discovered skills* checkbox with a live count and token
+  estimate, and a real `/settings` page listing the prompt sources with counts and *Rescan*.
+
+**Verified by hand (Firefox via MCP, dev server on `/tmp/piui-m5b-home` + `/tmp/piui-m5b-roots`)**
+
+1. Registering `/tmp/piui-m5b-roots/demo` raised the trust dialog listing exactly what was found
+   (`component`, `proj-helper`); *Decide later* left the card showing
+   *project resources available — review*. ✅ (§6.8, first half)
+2. `/` in the agent conversation listed the built-ins, `/skill:pdf-tools` (via *Include all
+   discovered skills*, count "1 discovered skill … ~17 tokens") and the templates with `user` /
+   `piui` badges and argument hints — **no** `component`, because the workspace was untrusted. ✅
+   (§§6.1, 6.9)
+3. `/review https://example.com/pr/1` → the transcript shows the typed command; *show expanded
+   (61 chars)* reveals `Review https://example.com/pr/1 carefully and list the risks.` ✅ (§6.2)
+4. `/skill:pdf-tools extract` → `show expanded (253 chars)` with the `<skill …>` block and the
+   argument. ✅ (§6.4)
+5. `/compcat` → *Unknown command `/compcat`…* inline, text still in the composer, nothing sent. ✅
+   (§6.5)
+6. Trusting the workspace from the card made `/component <Name> <behaviour> … project` appear in
+   the **same** conversation, and `/component Button "click handler"` expanded to
+   `Create component Button that handles Button click handler.` ✅ (§§6.3, 6.8)
+7. `/hotkeys` (a `client` command) opened the dialog listing Alt+T/Ctrl+T and Alt+O/Ctrl+O;
+   `Alt+T` flipped the transcript toggle. ✅ (§6.7)
+8. A chat conversation showed built-ins + `user`/`piui` templates and **no** skill commands and
+   no project templates; `/piui-note buy milk` expanded. ✅ (§6.10)
+9. `/settings` listed both source paths with counts; dropping `standup.md` into the user folder
+   and pressing **Rescan** reported `1 added · 0 updated · 0 removed`, and `/standup shipped M5b`
+   expanded in an **already-open** chat session. ✅
+10. Production build (`npm run build && NODE_ENV=production node server/dist/index.js`, port
+    8799): SPA, `/api/prompts`, `project-resources`, `GET …/commands` on an agent conversation and
+    an expanded `/component` run all answer on one port. ✅
+11. Suite: 330 tests green, offline, ~7 s; lint + strict typecheck clean.
+
+**Deviations / decisions**
+
+- *Open item 1 — the composed template set is **not** cached.* The spec suggests caching it on
+  the `LiveSession`; composing it is three `readdirSync` calls, and the invalidation rules (a
+  session outlives a profile edit, a `ConversationChannel` outlives the session) were the entire
+  cost. `GET …/commands` composes per request. The one place the set really is held is pi's
+  `ResourceLoader` inside the session, so the two events that change it drop sessions instead:
+  a trust flip drops every session in that workspace (`WorkspaceService.onTrustChanged` →
+  `hub.drop`), and `POST /api/prompts/rescan` calls `hub.dropAll()`. Both also emit
+  `skills_changed` on the global channel. Mutation-checked below; §6.8's test asserts a *run*
+  after trusting, not just the route.
+- *Open item 2 — the "user" source is `config.userAgentDir`* (`PIUI_USER_AGENT_DIR`, default
+  `~/.pi/agent`), and `createTempHome` points it at `<temp home>/user-pi/agent` for **every**
+  test, so no test can touch the real `~/.pi`. `~/.agents/skills` is derived from it
+  (`dirname(dirname(userAgentDir))/.agents/skills`) rather than from `homedir()`, so it is
+  redirected by the same switch. Discovery runs **on every read of the catalog** (`scan()`
+  already did), not on boot or rescan only: the filesystem stays the source of truth and there
+  is no ordering to get wrong.
+- *Open item 3 — trust is asked at registration*, exactly as acceptance 6.8 says: the create
+  mutation probes `project-resources` and raises the dialog when `hasPiDir`. *Decide later*
+  leaves `trust_decided_at` null and the card carries the review affordance, so the question is
+  never lost. An untrusted workspace contributes nothing (unit-tested in
+  `prompt-templates.test.ts` and end-to-end in `commands.test.ts`).
+- *Open item 4 — the profile editor stays one PATCH per toggle.* `includeDiscoveredSkills` is
+  one more checkbox on the same path; a batched save would be a new form-state machine for zero
+  user-visible gain. Revisit when the editor grows fields that must change together.
+- *Built-ins are only listed when their target exists.* `/compact`, `/export`, `/tree` and
+  `/fork` have no endpoint in this build (M6/M7 + the `[LATER]` fork block), and a menu entry
+  that 404s is worse than its absence. `/model` and `/thinking` currently answer with a notice
+  pointing at the picker; the in-conversation pickers are M7's job.
+- *`commandEcho` is live-session state.* pi's session file stores only the **expanded** text, so
+  the typed command is remembered per `LiveSession` (`Map<expandedText, echo>`) and decorates
+  both the SSE frames and the snapshot. After an eviction and revival the bubble shows the
+  expanded text — honest, since that is all pi kept. Recording it in the session file would mean
+  writing piui metadata into pi's format.
+- *`skills_changed` is the one "command surface changed" signal.* Rather than adding a
+  `prompts_changed` event, the existing (previously unused) `GlobalEvent` carries both; the
+  client's commands query is also refetched on focus, which is what makes a trust decision taken
+  on another page show up in an open conversation.
+- *Discovered skill rows key on their absolute path* (`dir_name = <abs dir>`, `ext_path` set),
+  because two roots may hold the same directory name; `SkillSummary.dirName` is the basename.
+  `markMissing` now covers external rows too, so a workspace that loses its trust disables its
+  project skills instead of leaving them enabled.
+- **Browser-only bug (the M5b one): a background tab froze the transcript.**
+  `useConversationStream` batched frames with `requestAnimationFrame`, which a hidden or
+  background tab never fires — the SSE connection stayed "connected" while the batch piled up
+  unapplied, so a run looked like it never happened until the tab regained focus. Found while
+  driving Firefox headless; fixed with a 250 ms `setTimeout` fallback next to the rAF, and
+  covered by `[10-frontend#3.1] applies frames in a background tab…`. Pre-existing since M2.
+- *`window.confirm` stays banned*: the trust dialog is an in-app dialog, like the delete dialogs.
+
+**Mutation spot-check (§9.6)** — three mutants, all caught by name:
+
+1. reversed the precedence order in `composePromptTemplates` (piui first) ⇒
+   `[15-commands-and-input#6.1] orders project over user over piui, and records the shadowing`
+   and `[15-commands-and-input#6.1] GET /api/prompts lists the global sources with counts`
+   failed (2 failed, 255 passed).
+2. dropped the `trusted === 1` condition in `CommandService.prompts` (project templates always
+   loaded) ⇒ `[15-commands-and-input#6.8] hides project templates until the workspace is
+   trusted, without a restart` failed (1 failed, 135 passed).
+3. made `LiveSession.withEcho` return the message unchanged ⇒
+   `[15-commands-and-input#6.3] lets pi substitute $1 and $@, and echoes the typed command` and
+   `[15-commands-and-input#6.2] expands a ~/.pi/agent/prompts template exactly as the terminal
+   does` failed (2 failed, 134 passed). All reverted. ✅
+
+**Open for M5c**
+
+- Extension commands (`source: "extension"`) are absent from the `/` menu by construction: the
+  command service has no extension input yet. M5c adds them next to the skill section, and the
+  same `kind` routing already covers them.
+- `/compact`, `/export`, `/fork`, `/tree` and the in-conversation `ModelPicker`/`ThinkingPicker`
+  are the remaining built-ins; they land with their endpoints (M6/M7). `Alt+M`/`Alt+P`/`Alt+C`
+  and `Ctrl+G` are still listed in `HotkeysDialog` without an implementation.
+- `POST /api/prompts/rescan` drops **every** live session, which is correct but blunt; if a
+  deployment ever runs many concurrent conversations, drop only the sessions whose composed set
+  actually changed.
+- `[LATER]` piui-managed template CRUD (`$PIUI_HOME/prompts` is read-only in the UI) and
+  `@file` completion, both explicitly out of V1 scope in `15-commands-and-input.md` §§4.2, 5.
+- The `/settings` page is now a real page with one panel; M7 owns the rest of it
+  (`steeringMode`/`followUpMode`, About, audit).

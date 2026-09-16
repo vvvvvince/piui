@@ -1,6 +1,7 @@
 // spec/09-api.md §8 (conversations) and §9 (the per-conversation event stream).
 import type {
 	AbortResponse,
+	CommandsResponse,
 	ConversationDetail,
 	ConversationStatsResponse,
 	CreateConversationRequest,
@@ -11,6 +12,7 @@ import type {
 	PostMessageResponse,
 	QueueResponse,
 } from "@piui/shared";
+import type { CommandService } from "../../commands/service.js";
 import type { ConversationService } from "../../conversations/service.js";
 import type { SessionHub } from "../../session/hub.js";
 import type { PiuiFastify } from "../auth.js";
@@ -22,6 +24,7 @@ export async function registerConversationRoutes(
 	app: PiuiFastify,
 	service: ConversationService,
 	hub: SessionHub,
+	commands: CommandService,
 ): Promise<void> {
 	app.get<{ Querystring: { archived?: string; limit?: string } }>(
 		"/api/conversations",
@@ -149,6 +152,14 @@ export async function registerConversationRoutes(
 	app.get<{ Params: { id: string } }>(
 		"/api/conversations/:id/stats",
 		async (req): Promise<ConversationStatsResponse> => service.stats(req.principal!, req.params.id),
+	);
+
+	// spec/15-commands-and-input.md §1.1 — computed per conversation, never cached.
+	app.get<{ Params: { id: string } }>(
+		"/api/conversations/:id/commands",
+		async (req): Promise<CommandsResponse> => ({
+			items: commands.commandsFor(service.rowFor(req.principal!, req.params.id)),
+		}),
 	);
 
 	// ------------------------------------------------------------------ SSE

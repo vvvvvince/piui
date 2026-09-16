@@ -187,6 +187,17 @@ describe("useConversationStream", () => {
 		vi.unstubAllGlobals();
 	});
 
+	it("[10-frontend#3.1] applies frames in a background tab, where requestAnimationFrame never fires", async () => {
+		vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
+		// A hidden tab gets no animation frames; the transcript must still advance.
+		vi.stubGlobal("requestAnimationFrame", () => 1);
+		const { result } = renderHook(() => useConversationStream("c-bg"));
+		act(() => {
+			FakeEventSource.last!.push(snapshot);
+		});
+		await waitFor(() => expect(result.current.messages).toHaveLength(1), { timeout: 2000 });
+	});
+
 	it("[10-frontend#3.1] applies live frames and reconnects with ?since=<lastSeq>", async () => {
 		vi.stubGlobal("EventSource", FakeEventSource as unknown as typeof EventSource);
 		const { result } = renderHook(() => useConversationStream("c1"));

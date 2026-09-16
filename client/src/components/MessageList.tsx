@@ -1,10 +1,31 @@
 // Transcript rendering (spec/10-frontend.md §2): MessageList + MessageBubble + ToolCallCard.
 import type { UiBlock, UiMessage } from "@piui/shared";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { MarkdownView } from "./MarkdownView.js";
 
+/**
+ * spec/15-commands-and-input.md §4.3 — Alt+T / Alt+O collapse every thinking block / tool
+ * output at once. `version` is bumped on each toggle so a card that the user opened by hand
+ * still follows the next global toggle.
+ */
+const Collapse = createContext({ thinking: false, tools: false, version: 0 });
+
+/** Local open state that a global Alt+T / Alt+O overrides. */
+function useCollapsible(
+	initial: boolean,
+	kind: "thinking" | "tools",
+): [boolean, (v: boolean) => void] {
+	const collapse = useContext(Collapse);
+	const [open, setOpen] = useState(initial);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: follows the toggle, not the value
+	useEffect(() => {
+		if (collapse.version > 0) setOpen(kind === "thinking" ? collapse.thinking : collapse.tools);
+	}, [collapse.version]);
+	return [open, setOpen];
+}
+
 function ThinkingBlock({ block }: { block: Extract<UiBlock, { type: "thinking" }> }): JSX.Element {
-	const [open, setOpen] = useState(false);
+	const [open, setOpen] = useCollapsible(false, "thinking");
 	return (
 		<div className="my-1 rounded border border-slate-800 bg-slate-900/40 p-2 text-xs text-slate-400">
 			<button type="button" className="font-medium" onClick={() => setOpen(!open)}>
@@ -99,7 +120,7 @@ function SourcesFooter({ message }: { message: UiMessage }): JSX.Element | null 
 }
 
 function WebSearchCard({ block }: { block: ToolBlock }): JSX.Element {
-	const [open, setOpen] = useState(false);
+	const [open, setOpen] = useCollapsible(false, "tools");
 	const details = searchDetails(block);
 	const query = details.query ?? (block.args as { query?: string } | undefined)?.query ?? "";
 	const results = details.results ?? [];
@@ -141,7 +162,7 @@ function WebSearchCard({ block }: { block: ToolBlock }): JSX.Element {
 }
 
 function WebFetchCard({ block }: { block: ToolBlock }): JSX.Element {
-	const [open, setOpen] = useState(false);
+	const [open, setOpen] = useCollapsible(false, "tools");
 	const details = fetchDetails(block);
 	const url = details.finalUrl ?? details.url ?? (block.args as { url?: string })?.url ?? "";
 	return (
@@ -184,7 +205,7 @@ function Card({
 	openByDefault?: boolean;
 }): JSX.Element {
 	// Successful cards collapse, errors stay open (spec/08-agent-mode.md §2 collapse policy).
-	const [open, setOpen] = useState(openByDefault ?? block.state === "error");
+	const [open, setOpen] = useCollapsible(openByDefault ?? block.state === "error", "tools");
 	const colour =
 		block.state === "error"
 			? "border-rose-800"
@@ -337,7 +358,7 @@ function MemoryCard({ block }: { block: ToolBlock }): JSX.Element {
 }
 
 function ToolCallCard({ block }: { block: ToolBlock }): JSX.Element {
-	const [open, setOpen] = useState(block.state === "running");
+	const [open, setOpen] = useCollapsible(block.state === "running", "tools");
 	const colour =
 		block.state === "error"
 			? "border-rose-800"
@@ -391,6 +412,9 @@ function Blocks({ blocks }: { blocks: UiBlock[] }): JSX.Element {
 export function MessageBubble({ message }: { message: UiMessage }): JSX.Element {
 	const isUser = message.role === "user";
 	const isError = message.role === "error";
+	// spec/15-commands-and-input.md §1.3 — show the typed command, not the expansion.
+	const [showExpanded, setShowExpanded] = useState(false);
+	const echo = message.commandEcho;
 	return (
 		<article
 			className={`rounded-lg border p-3 ${
@@ -402,7 +426,21 @@ export function MessageBubble({ message }: { message: UiMessage }): JSX.Element 
 			}`}
 			data-role={message.role}
 		>
-			<Blocks blocks={message.blocks} />
+			{echo ? (
+				<>
+					<p className="font-mono text-sm text-sky-100">{echo.typed}</p>
+					<button
+						type="button"
+						className="mt-1 text-[11px] text-slate-400 underline"
+						onClick={() => setShowExpanded(!showExpanded)}
+					>
+						{showExpanded ? "hide expanded" : `show expanded (${echo.expandedChars} chars)`}
+					</button>
+					{showExpanded && <Blocks blocks={message.blocks} />}
+				</>
+			) : (
+				<Blocks blocks={message.blocks} />
+			)}
 			{!isUser && <SourcesFooter message={message} />}
 			<footer className="mt-2 flex gap-3 text-[11px] text-slate-500">
 				{message.model && <span>{message.model}</span>}
@@ -421,6 +459,32 @@ export function MessageBubble({ message }: { message: UiMessage }): JSX.Element 
 export function MessageList({ messages }: { messages: UiMessage[] }): JSX.Element {
 	const bottom = useRef<HTMLDivElement>(null);
 	const container = useRef<HTMLDivElement>(null);
+	const [collapse, setCollapse] = useState({ thinking: false, tools: false, version: 0 });
+
+	// spec §4.3: Alt+T / Alt+O, never inside a dialog. Both are also buttons, below.
+	useEffect(() => {
+		const onKey = (event: KeyboardEvent): void => {
+			if (!event.altKey || event.ctrlKey || event.metaKey) return;
+			const key = event.key.toLowerCase();
+			if (key !== "t" && key !== "o") return;
+			if ((event.target as HTMLElement | null)?.closest?.('[role="dialog"]')) return;
+			event.preventDefault();
+			setCollapse((current) => ({
+				...current,
+				version: current.version + 1,
+				...(key === "t" ? { thinking: !current.thinking } : { tools: !current.tools }),
+			}));
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, []);
+
+	const toggle = (kind: "thinking" | "tools") =>
+		setCollapse((current) => ({
+			...current,
+			version: current.version + 1,
+			...(kind === "thinking" ? { thinking: !current.thinking } : { tools: !current.tools }),
+		}));
 
 	useEffect(() => {
 		const element = container.current;
@@ -440,9 +504,21 @@ export function MessageList({ messages }: { messages: UiMessage[] }): JSX.Elemen
 			{messages.length === 0 && (
 				<p className="text-sm text-slate-500">No messages yet — say something below.</p>
 			)}
-			{messages.map((message) => (
-				<MessageBubble key={message.id} message={message} />
-			))}
+			{messages.length > 0 && (
+				<div className="flex justify-end gap-3 text-[11px] text-slate-500">
+					<button type="button" className="hover:underline" onClick={() => toggle("thinking")}>
+						{collapse.thinking ? "Collapse" : "Expand"} thinking (Alt+T)
+					</button>
+					<button type="button" className="hover:underline" onClick={() => toggle("tools")}>
+						{collapse.tools ? "Collapse" : "Expand"} tool output (Alt+O)
+					</button>
+				</div>
+			)}
+			<Collapse.Provider value={collapse}>
+				{messages.map((message) => (
+					<MessageBubble key={message.id} message={message} />
+				))}
+			</Collapse.Provider>
 			<div ref={bottom} />
 		</div>
 	);

@@ -3,7 +3,7 @@
 // reviewed at every milestone gate.
 
 /** Milestones whose acceptance lists are enforced by test/spec-coverage.test.ts. */
-export const COMPLETED_MILESTONES = ["M0", "M1", "M2", "M3", "M4", "M5"] as const;
+export const COMPLETED_MILESTONES = ["M0", "M1", "M2", "M3", "M4", "M5", "M5b"] as const;
 
 /** Permanently exempt: manual, environmental, or process criteria. */
 export const exemptions: Record<string, string> = {
@@ -28,18 +28,6 @@ export const pending: Record<string, string> = {
 	"05-skills-and-tools#B.5.4": "M6",
 	"05-skills-and-tools#B.5.5": "M6",
 	"05-skills-and-tools#B.5.6": "M6",
-	// 15-commands-and-input is an M2+M5b spec: M2 ships §4's input semantics (tagged in
-	// client/src/components/Composer.test.tsx), the `/` menu and prompt templates are M5b.
-	"15-commands-and-input#6.1": "M5b",
-	"15-commands-and-input#6.2": "M5b",
-	"15-commands-and-input#6.3": "M5b",
-	"15-commands-and-input#6.4": "M5b",
-	"15-commands-and-input#6.5": "M5b",
-	"15-commands-and-input#6.6": "M5b",
-	"15-commands-and-input#6.7": "M5b",
-	"15-commands-and-input#6.8": "M5b",
-	"15-commands-and-input#6.9": "M5b",
-	"15-commands-and-input#6.10": "M5b",
 	// 14-credentials §§9.1-9.6, 9.8-9.10 landed in M2; 9.7 in M1.
 	"19-deployment#9.4": "M7",
 	// M4 covers its second half offline (`PIUI_WORKSPACE_ROOTS` refuses a path outside the roots,

@@ -5,6 +5,7 @@ import type {
 	ApiErrorBody,
 	ApiErrorCode,
 	AuthFlowView,
+	CommandsResponse,
 	ConversationDetail,
 	ConversationStatsResponse,
 	ConversationSummary,
@@ -28,6 +29,9 @@ import type {
 	ProfileDetail,
 	ProfileMemoryResponse,
 	ProfilesResponse,
+	ProjectResourcesResponse,
+	PromptRescanResponse,
+	PromptsResponse,
 	ProviderStatus,
 	ProvidersResponse,
 	QueueResponse,
@@ -196,6 +200,8 @@ export const api = {
 			method: "POST",
 			body: { path, ...(create ? { create: true } : {}) },
 		}),
+	projectResources: (id: string) =>
+		request<ProjectResourcesResponse>(`/workspaces/${id}/project-resources`),
 	workspaceTree: (id: string, path = "") =>
 		request<WorkspaceTreeResponse>(`/workspaces/${id}/tree?path=${encodeURIComponent(path)}`),
 	workspaceFile: (id: string, path: string) =>
@@ -210,6 +216,9 @@ export const api = {
 	createConversation: (body: CreateConversationRequest) =>
 		request<CreateConversationResponse>("/conversations", { method: "POST", body }),
 	conversation: (id: string) => request<ConversationDetail>(`/conversations/${id}`),
+	commands: (id: string) => request<CommandsResponse>(`/conversations/${id}/commands`),
+	prompts: () => request<PromptsResponse>("/prompts"),
+	rescanPrompts: () => request<PromptRescanResponse>("/prompts/rescan", { method: "POST" }),
 	conversationMessages: (id: string) => request<MessagesResponse>(`/conversations/${id}/messages`),
 	patchConversation: (id: string, body: PatchConversationRequest) =>
 		request<ConversationDetail>(`/conversations/${id}`, { method: "PATCH", body }),

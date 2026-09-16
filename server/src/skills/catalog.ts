@@ -1,7 +1,7 @@
 // The skills read path (plan/05 §1, spec/05-skills-and-tools.md §A.3): the filesystem is the
 // source of truth, the `skills` table is a mirror. Full CRUD is M6.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { Principal, SkillSummary } from "@piui/shared";
 import type { AppContext } from "../context.js";
 import type { SkillRow } from "../db/repositories/skills.js";
@@ -39,44 +39,91 @@ export function parseFrontmatter(source: string): SkillFrontmatter | undefined {
 	return out;
 }
 
+/** A discovery root: every subdirectory holding a SKILL.md becomes a catalog entry. */
+interface SkillRoot {
+	dir: string;
+	source: "managed" | "external";
+	location?: "user" | "project";
+}
+
 export class SkillCatalog {
 	constructor(private readonly ctx: AppContext) {}
 
+	/**
+	 * spec/15-commands-and-input.md §3.2 — TUI-like discovery: the piui-managed folder plus
+	 * `~/.pi/agent/skills`, `~/.agents/skills` and, for **trusted** workspaces only, their
+	 * `.pi/skills` and `.agents/skills`. Discovered skills are registered, never auto-enabled.
+	 */
+	private roots(): SkillRoot[] {
+		const userAgentDir = this.ctx.config.userAgentDir;
+		const roots: SkillRoot[] = [
+			{ dir: this.ctx.config.paths.skills, source: "managed" },
+			{ dir: join(userAgentDir, "skills"), source: "external", location: "user" },
+			// `~/.agents/skills` sits next to `~/.pi`, so it follows the redirected user agent dir.
+			{
+				dir: join(dirname(dirname(userAgentDir)), ".agents", "skills"),
+				source: "external",
+				location: "user",
+			},
+		];
+		for (const workspace of this.ctx.repos.workspaces.allTrusted()) {
+			roots.push(
+				{ dir: join(workspace.path, ".pi", "skills"), source: "external", location: "project" },
+				{ dir: join(workspace.path, ".agents", "skills"), source: "external", location: "project" },
+			);
+		}
+		return roots;
+	}
+
 	/** Rescan on every read — cheap, and it keeps a hand-edited directory honest (§A.3). */
 	scan(): void {
-		const root = this.ctx.config.paths.skills;
 		const seen = new Set<string>();
-		let dirs: string[] = [];
-		try {
-			dirs = readdirSync(root, { withFileTypes: true })
-				.filter((entry) => entry.isDirectory())
-				.map((entry) => entry.name);
-		} catch {
-			return;
-		}
-		for (const dirName of dirs) {
-			const file = join(root, dirName, "SKILL.md");
-			let front: SkillFrontmatter | undefined;
+		for (const root of this.roots()) {
+			let dirs: string[] = [];
 			try {
-				front = parseFrontmatter(readFileSync(file, "utf8"));
+				dirs = readdirSync(root.dir, { withFileTypes: true })
+					.filter((entry) => entry.isDirectory())
+					.map((entry) => entry.name);
 			} catch {
 				continue;
 			}
-			// Unparseable frontmatter is an M6 *validation* concern; the M5 scan just skips it.
-			if (!front?.name || !front.description) continue;
-			const row = this.ctx.repos.skills.upsert({
-				dirName,
-				name: front.name,
-				description: front.description,
-				ownerId: this.ctx.repos.users.adminId(),
-			});
-			seen.add(row.id);
+			for (const dirName of dirs) {
+				const dir = join(root.dir, dirName);
+				let front: SkillFrontmatter | undefined;
+				try {
+					front = parseFrontmatter(readFileSync(join(dir, "SKILL.md"), "utf8"));
+				} catch {
+					continue;
+				}
+				// Unparseable frontmatter is an M6 *validation* concern; the scan just skips it.
+				if (!front?.name || !front.description) continue;
+				const row = this.ctx.repos.skills.upsert({
+					// Discovered skills key on their absolute path: two roots may hold the same name.
+					dirName: root.source === "managed" ? dirName : dir,
+					name: front.name,
+					description: front.description,
+					source: root.source,
+					...(root.source === "external" ? { extPath: dir } : {}),
+					ownerId: this.ctx.repos.users.adminId(),
+				});
+				if (!seen.has(row.id)) seen.add(row.id);
+			}
 		}
+		// Anything not seen this pass lost its directory or its trust: disabled, never deleted.
 		const missing = this.ctx.repos.skills
 			.all()
-			.filter((row) => row.source === "managed" && !seen.has(row.id))
+			.filter((row) => !seen.has(row.id))
 			.map((row) => row.id);
 		this.ctx.repos.skills.markMissing(missing);
+	}
+
+	/** spec §3.2 — the ids "Include all discovered skills" activates. */
+	discoveredSkillIds(): string[] {
+		this.scan();
+		return this.ctx.repos.skills
+			.all()
+			.filter((row) => row.source === "external" && row.enabled === 1)
+			.map((row) => row.id);
 	}
 
 	list(principal: Principal): SkillSummary[] {
@@ -95,9 +142,15 @@ export class SkillCatalog {
 	view(row: SkillRow): SkillSummary {
 		const dir = this.dirOf(row);
 		const missing = !existsSync(join(dir, "SKILL.md"));
+		const location = row.ext_path
+			? this.ctx.repos.workspaces.allTrusted().some((ws) => dir.startsWith(`${ws.path}/`))
+				? ("project" as const)
+				: ("user" as const)
+			: undefined;
 		return {
 			id: row.id,
-			dirName: row.dir_name,
+			dirName: basename(row.dir_name),
+			...(location ? { location } : {}),
 			name: row.name,
 			description: row.description,
 			enabled: row.enabled === 1 && !missing,

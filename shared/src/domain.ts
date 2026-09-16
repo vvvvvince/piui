@@ -50,6 +50,8 @@ export interface Profile extends Owned {
 	skillIds: string[];
 	toolNames: string[];
 	memory: { enabled: boolean; path: string | null; sizeBytes?: number };
+	/** spec/15-commands-and-input.md §3.2 — activate every discovered skill (TUI behavior). */
+	includeDiscoveredSkills: boolean;
 	defaults?: { provider?: string; modelId?: string; thinkingLevel?: ThinkingLevel };
 	createdAt: string;
 	updatedAt: string;
@@ -69,6 +71,8 @@ export interface Workspace {
 	path: string;
 	description: string;
 	trusted: boolean;
+	/** When the trust question was answered; null means "never asked" (spec/15 §3.3). */
+	trustDecidedAt: string | null;
 	status: WorkspaceStatus;
 	/** Conversations pointing at this workspace (spec/04-workspaces.md §4). */
 	activeConversations: number;
@@ -84,6 +88,8 @@ export interface SkillSummary {
 	enabled: boolean;
 	source: "managed" | "external";
 	path: string;
+	/** Where a discovered skill came from (spec/15 §3.2); absent for piui-managed skills. */
+	location?: "user" | "project";
 	files?: string[];
 	warnings: string[];
 	/** spec/09-api.md §6 — profiles that selected this skill. */

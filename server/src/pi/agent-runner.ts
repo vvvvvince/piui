@@ -6,6 +6,7 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import type { SessionMode, ThinkingLevel } from "@piui/shared";
+import type { PiuiPromptTemplate } from "./prompts.js";
 import { createResourceLoader, createSettingsManager } from "./resources.js";
 import type { ModelRuntime } from "./runtime.js";
 
@@ -26,6 +27,8 @@ export interface ResolvedSessionConfig {
 	agentsFiles?: { path: string; content: string }[];
 	/** Resolved pi `Skill` objects; agent mode only (spec/03-profiles.md §3). */
 	skills?: unknown[];
+	/** Composed prompt templates, highest precedence first (spec/15 §3.1). */
+	prompts?: PiuiPromptTemplate[];
 	steeringMode?: "all" | "one-at-a-time";
 	followUpMode?: "all" | "one-at-a-time";
 }
@@ -77,6 +80,7 @@ export async function createSession(input: CreateSessionInput): Promise<AgentRun
 		...(config.systemPrompt === undefined ? {} : { systemPrompt: config.systemPrompt }),
 		...(config.agentsFiles ? { agentsFiles: config.agentsFiles } : {}),
 		...(config.skills ? { skills: config.skills } : {}),
+		...(config.prompts ? { prompts: config.prompts } : {}),
 	});
 
 	const { session } = await createAgentSession({

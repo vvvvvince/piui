@@ -51,6 +51,11 @@ export class WorkspaceRepository extends Repository {
 			| undefined;
 	}
 
+	/** Unscoped: skill/prompt discovery only loads project resources of trusted folders. */
+	allTrusted(): WorkspaceRow[] {
+		return this.db.prepare("SELECT * FROM workspaces WHERE trusted = 1").all() as WorkspaceRow[];
+	}
+
 	findByName(name: string): WorkspaceRow | undefined {
 		return this.db.prepare("SELECT * FROM workspaces WHERE name = ?").get(name) as
 			| WorkspaceRow

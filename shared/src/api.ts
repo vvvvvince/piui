@@ -348,6 +348,7 @@ export interface CreateProfileRequest {
 	agentsMd?: string;
 	skillIds?: string[];
 	toolNames?: string[];
+	includeDiscoveredSkills?: boolean;
 	memory?: { enabled: boolean; path?: string | null };
 	defaults?: { provider?: string; modelId?: string; thinkingLevel?: ThinkingLevel };
 }
@@ -368,6 +369,59 @@ export interface ProfileMemoryResponse {
 	truncated: boolean;
 	injectedBytes: number;
 	noteCount: number;
+}
+
+// ------------------------------------------------- commands & prompt templates
+
+/** spec/15-commands-and-input.md §1.1. */
+export interface CommandDescriptor {
+	name: string;
+	display: string;
+	description: string;
+	argumentHint?: string;
+	source: "builtin" | "prompt" | "skill" | "extension";
+	location?: "piui" | "user" | "project";
+	/** How the client executes it (spec §2). */
+	kind: "client" | "server" | "expand";
+	availableWhileStreaming: boolean;
+}
+
+export interface CommandsResponse {
+	items: CommandDescriptor[];
+}
+
+/** spec/15-commands-and-input.md §5. */
+export interface PromptTemplateSummary {
+	name: string;
+	description: string;
+	argumentHint?: string;
+	location: "piui" | "user" | "project";
+	path: string;
+	/** A same-named template from a lower-precedence source that this one hides. */
+	shadows?: ("piui" | "user")[];
+}
+
+export interface PromptsResponse {
+	items: PromptTemplateSummary[];
+	/** The three source directories with their counts, for the Settings page. */
+	sources: { location: "piui" | "user" | "project"; path: string; count: number }[];
+}
+
+export interface PromptRescanResponse {
+	added: number;
+	updated: number;
+	removed: number;
+}
+
+/** spec/09-api.md §5 — drives the workspace trust dialog (spec/15 §3.3). */
+export interface ProjectResourcesResponse {
+	hasPiDir: boolean;
+	prompts: string[];
+	skills: string[];
+	extensions: string[];
+	settings: boolean;
+	trusted: boolean;
+	trustDecidedAt: string | null;
 }
 
 export interface SkillsResponse {

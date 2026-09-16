@@ -26,6 +26,11 @@ export function isAdminOnly(method: HttpMethod, url: string): boolean {
 	if (method === "PATCH" && /^\/api\/tools\/[^/]+$/.test(path) && path !== "/api/tools/http") {
 		return true;
 	}
+	// M6 decision: the whole HTTP-tool surface is admin-only. 18-multi-user.md §5 names only
+	// `PATCH /api/tools/:name`, but an HTTP tool makes outbound calls from this host with
+	// server-side secrets in its headers — the same blast radius as an extension, which §5 does
+	// list. Reads are included because they expose the URLs and header *names* of those calls.
+	if (path === "/api/tools/http" || path.startsWith("/api/tools/http/")) return true;
 	// every rescan endpoint
 	if (method === "POST" && path.endsWith("/rescan")) return true;
 	// the filesystem picker enumerates the machine

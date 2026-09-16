@@ -43,12 +43,24 @@ export function ConversationPage(): JSX.Element {
 	}, [stream.doneCount, id, queryClient]);
 
 	const send = useMutation({
-		mutationFn: (input: { text: string; streamingBehavior?: "steer" | "followUp" }) =>
-			api.sendMessage(id!, input),
+		mutationFn: (input: {
+			text: string;
+			streamingBehavior?: "steer" | "followUp";
+			attachments?: { uploadId: string }[];
+		}) => api.sendMessage(id!, input),
 	});
 
 	// The globe toggle applies from the next prompt and emits a notice (spec/07-chat-mode.md §3).
 	const meta = useQuery({ queryKey: ["meta"], queryFn: api.meta });
+	// spec/07-chat-mode.md §3 — the attach button is live only for a vision-capable model.
+	const models = useQuery({ queryKey: ["models"], queryFn: () => api.models() });
+	const imagesSupported =
+		models.data?.items
+			.find(
+				(model) =>
+					model.provider === detail.data?.model.provider && model.id === detail.data?.model.modelId,
+			)
+			?.input.includes("image") ?? false;
 	const setWebSearch = useMutation({
 		mutationFn: (webSearch: boolean) => api.patchConversation(id!, { webSearch }),
 		onSuccess: () => {
@@ -222,10 +234,26 @@ export function ConversationPage(): JSX.Element {
 				streaming={streaming}
 				commands={commands.data?.items ?? []}
 				onCommand={runCommand}
+				imagesSupported={imagesSupported}
+				onUpload={async (file) => {
+					const uploaded = await api.upload(id!, file);
+					return { uploadId: uploaded.id, url: uploaded.url, mimeType: uploaded.mimeType };
+				}}
 				handlers={{
-					onSend: (text) => send.mutateAsync({ text }),
-					onSteer: (text) => send.mutateAsync({ text, streamingBehavior: "steer" }),
-					onFollowUp: (text) => send.mutateAsync({ text, streamingBehavior: "followUp" }),
+					onSend: (text, attachments) =>
+						send.mutateAsync({ text, ...(attachments ? { attachments } : {}) }),
+					onSteer: (text, attachments) =>
+						send.mutateAsync({
+							text,
+							streamingBehavior: "steer",
+							...(attachments ? { attachments } : {}),
+						}),
+					onFollowUp: (text, attachments) =>
+						send.mutateAsync({
+							text,
+							streamingBehavior: "followUp",
+							...(attachments ? { attachments } : {}),
+						}),
 					onAbort: async () => {
 						const result = await api.abortConversation(id);
 						return joinQueue(result.restored);

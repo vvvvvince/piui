@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import fastifyCookie from "@fastify/cookie";
+import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import type { HealthResponse, MetaResponse } from "@piui/shared";
 import Fastify from "fastify";
@@ -16,7 +17,9 @@ import { registerModelRoutes } from "./routes/models.js";
 import { registerProfileRoutes } from "./routes/profiles.js";
 import { registerPromptRoutes } from "./routes/prompts.js";
 import { registerProviderRoutes } from "./routes/providers.js";
+import { registerSkillRoutes } from "./routes/skills.js";
 import { registerToolRoutes } from "./routes/tools.js";
+import { registerUploadRoutes } from "./routes/uploads.js";
 import { registerWorkspaceRoutes } from "./routes/workspaces.js";
 
 declare module "fastify" {
@@ -40,6 +43,11 @@ export async function buildServer(ctx: AppContext, injected?: Services) {
 	});
 
 	await app.register(fastifyCookie, { secret: config.sessionSecret });
+	// Uploads (spec/09-api.md §10) and skill zip import (spec/05 §A.4). The transport cap is
+	// deliberately generous: both domains enforce their own limit and report it in the envelope.
+	await app.register(fastifyMultipart, {
+		limits: { files: 1, fileSize: Math.max(config.maxUploadMb, 64) * 1024 * 1024 },
+	});
 
 	const loginLimiter = new LoginRateLimiter(() => ctx.clock.nowMs());
 	await registerAuth(app, { ctx, provider: ctx.authProvider, limiter: loginLimiter });
@@ -152,7 +160,9 @@ export async function buildServer(ctx: AppContext, injected?: Services) {
 	await registerGlobalEventRoutes(app, services);
 	await registerToolRoutes(app, ctx, services);
 	await registerWorkspaceRoutes(app, services.workspaces, services.commands);
-	await registerProfileRoutes(app, services.profiles, services.skills);
+	await registerProfileRoutes(app, services.profiles);
+	await registerSkillRoutes(app, ctx, services.skillWrites, services.skillTests);
+	await registerUploadRoutes(app, services);
 	await registerConversationRoutes(app, services.conversations, services.hub, services.commands);
 	await registerPromptRoutes(app, services.commands);
 	await registerExtensionRoutes(app, services.extensions);

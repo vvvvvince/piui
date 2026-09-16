@@ -24,6 +24,8 @@ export interface TempHome {
 export interface TempHomeOptions {
 	env?: Record<string, string | undefined>;
 	fetch?: typeof fetch;
+	/** DNS for the SSRF guard; the default refuses, like `fetch`. */
+	lookup?: (hostname: string) => Promise<string[]>;
 	clock?: FakeClock;
 	ids?: SeqIdGen;
 	/** Swapping the auth provider must touch nothing but this wiring (spec/06-auth.md §8.6). */
@@ -59,6 +61,11 @@ export function createTempHome(options: TempHomeOptions = {}): TempHome {
 		sleep: async (ms: number) => {
 			sleeps.push(ms);
 		},
+		lookup:
+			options.lookup ??
+			(() => {
+				throw new Error("no test may resolve a real hostname — inject a lookup");
+			}),
 		fetch:
 			options.fetch ??
 			((() => {

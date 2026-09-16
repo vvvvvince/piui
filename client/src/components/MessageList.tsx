@@ -441,6 +441,21 @@ export function MessageBubble({ message }: { message: UiMessage }): JSX.Element 
 			) : (
 				<Blocks blocks={message.blocks} />
 			)}
+			{(message.attachments?.length ?? 0) > 0 && (
+				<ul className="mt-2 flex flex-wrap gap-2" data-testid="message-attachments">
+					{message.attachments?.map((attachment) => (
+						<li key={attachment.id}>
+							<a href={attachment.url} target="_blank" rel="noreferrer noopener">
+								<img
+									src={attachment.url}
+									alt="attachment"
+									className="max-h-48 rounded border border-slate-700"
+								/>
+							</a>
+						</li>
+					))}
+				</ul>
+			)}
 			{!isUser && <SourcesFooter message={message} />}
 			<footer className="mt-2 flex gap-3 text-[11px] text-slate-500">
 				{message.model && <span>{message.model}</span>}

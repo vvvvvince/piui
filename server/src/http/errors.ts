@@ -21,6 +21,8 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
 	// spec/09-api.md §5: GET /api/workspaces/:id/file on a binary file.
 	binary_file: 415,
 	skill_invalid: 400,
+	// spec/05-skills-and-tools.md §A.1: external skills are read-only in piui.
+	skill_not_editable: 409,
 	// spec/03-profiles.md §7.
 	agents_md_too_large: 400,
 	tool_name_taken: 409,

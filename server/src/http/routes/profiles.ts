@@ -6,10 +6,8 @@ import type {
 	ProfileDetail,
 	ProfileMemoryResponse,
 	ProfilesResponse,
-	SkillsResponse,
 } from "@piui/shared";
 import type { ProfileService } from "../../profiles/service.js";
-import type { SkillCatalog } from "../../skills/catalog.js";
 import type { PiuiFastify } from "../auth.js";
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -48,7 +46,6 @@ const PROFILE_BODY = {
 export async function registerProfileRoutes(
 	app: PiuiFastify,
 	profiles: ProfileService,
-	skills: SkillCatalog,
 ): Promise<void> {
 	app.get("/api/profiles", async (req): Promise<ProfilesResponse> => {
 		return { items: profiles.list(req.principal!) };
@@ -121,11 +118,5 @@ export async function registerProfileRoutes(
 		reply.header("content-type", "text/markdown; charset=utf-8");
 		reply.header("content-disposition", `attachment; filename="memory-${req.params.id}.md"`);
 		return memory.content;
-	});
-
-	// -------------------------------------------------------------- skills
-	// M5 ships the read path only; CRUD, import and test-run are M6.
-	app.get("/api/skills", async (req): Promise<SkillsResponse> => {
-		return { items: skills.list(req.principal!) };
 	});
 }

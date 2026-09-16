@@ -26,6 +26,16 @@ import { projectTranscript } from "../session/transcript.js";
 
 const SYSTEM_PROMPT_PREVIEW_LIMIT = 4 * 1024;
 
+function parseToolNames(json: string | null): string[] {
+	try {
+		const parsed = JSON.parse(json ?? "") as unknown;
+		if (Array.isArray(parsed)) return parsed.filter((n): n is string => typeof n === "string");
+	} catch {
+		/* the default below */
+	}
+	return ["read"];
+}
+
 export class ConversationService {
 	constructor(
 		private readonly ctx: AppContext,
@@ -166,6 +176,10 @@ export class ConversationService {
 
 	async get(principal: Principal, id: string): Promise<ConversationDetail> {
 		const row = this.ctx.repos.conversations.getOrThrow(principal, id);
+		if (row.ephemeral === 1) {
+			if (!this.hub.peek(id)) await this.hub.ensure(id);
+			return this.detail(this.ctx.repos.conversations.getOrThrow(principal, id));
+		}
 		// An agent conversation's prompt can only be read off a real session; a broken workspace
 		// must still render the page, so a failure here falls back to the offline preview (§8.7).
 		if (row.mode === "agent" && !this.hub.peek(id)) {
@@ -309,6 +323,7 @@ export class ConversationService {
 		id: string,
 		text: string,
 		streamingBehavior?: "steer" | "followUp",
+		attachments?: readonly { uploadId?: string; mimeType?: string; data?: string }[],
 	): Promise<"steer" | "followUp" | null> {
 		const row = this.ctx.repos.conversations.getOrThrow(principal, id);
 		// spec/04-workspaces.md §§3,6 — a workspace whose folder vanished blocks new prompts with a
@@ -316,13 +331,21 @@ export class ConversationService {
 		if (row.workspace_id) this.services.workspaces.requireUsable(row.workspace_id);
 		// spec/03-profiles.md §7: a deleted profile leaves the transcript readable but refuses new
 		// prompts, with a message that says what happened.
-		if (row.mode === "agent" && !row.profile_id) {
+		if (row.mode === "agent" && !row.profile_id && row.ephemeral === 0) {
 			throw new ApiError(
 				"profile_not_found",
 				"This conversation's profile was deleted, so it can no longer run. Start a new conversation.",
 			);
 		}
-		const queuedAs = await this.hub.prompt(id, text, streamingBehavior);
+		// spec/09-api.md §10: an id refers to a stored upload, `data` is the small-image path.
+		const images = (attachments ?? []).map((attachment) => {
+			if (attachment.uploadId) return this.services.uploads.imageOf(id, attachment.uploadId);
+			// The inline path is stored too, so magic bytes are checked once and the transcript
+			// can serve the picture back after a reload.
+			const stored = this.services.uploads.store(id, Buffer.from(attachment.data ?? "", "base64"));
+			return this.services.uploads.imageOf(id, stored.id);
+		});
+		const queuedAs = await this.hub.prompt(id, text, streamingBehavior, images);
 		if (row.title_locked === 0 && row.title === "") {
 			void this.autoTitle(row, text);
 		}
@@ -353,6 +376,9 @@ export class ConversationService {
 				`No model ${row.provider}/${row.model_id} is registered.`,
 			);
 		}
+		// spec/05-skills-and-tools.md §A.4 — a skill test run: one skill, `read` (+`bash`), an
+		// empty scratch cwd, no profile and no workspace.
+		if (row.ephemeral === 1 && row.skill_id) return this.createSkillTestSession(row);
 		const agent = row.mode === "agent" ? this.resolveAgent(row) : undefined;
 		// spec/08-agent-mode.md §1: cwd is the workspace, and the folder must still exist.
 		const cwd = agent
@@ -379,6 +405,8 @@ export class ConversationService {
 		const web = wantsWeb ? this.services.createWebToolSet() : undefined;
 		const customTools = [
 			...(web ? web.tools : []),
+			// spec/05-skills-and-tools.md §B.2 — user-defined HTTP tools the profile selected.
+			...this.services.httpTools.toolsFor(toolNames),
 			...(agent && toolNames.includes("memory_append")
 				? [this.memoryToolFor(conversationId, agent)]
 				: []),
@@ -429,6 +457,44 @@ export class ConversationService {
 		return handle as SessionHandle;
 	}
 
+	/** spec/05-skills-and-tools.md §A.4 — the ephemeral session behind `POST /api/skills/:id/test`. */
+	private async createSkillTestSession(row: ConversationRow): Promise<SessionHandle> {
+		const model = this.services.models.getModel(row.provider, row.model_id);
+		if (!model) {
+			throw new ApiError("model_unavailable", `No model ${row.provider}/${row.model_id}.`);
+		}
+		const { skills, warnings } = this.services.skills.resolve([row.skill_id!]);
+		for (const warning of warnings) {
+			this.hub.notify(row.id, { type: "notice", level: "warning", text: warning });
+		}
+		const cwd = this.scratchDir(row.id);
+		mkdirSync(cwd, { recursive: true, mode: 0o700 });
+		const tools = parseToolNames(row.ephemeral_tools);
+		const handle = await createSession({
+			config: {
+				conversationId: row.id,
+				mode: "agent",
+				model,
+				thinkingLevel: row.thinking_level as ThinkingLevel,
+				cwd,
+				agentDir: this.ctx.config.agentDir,
+				modelRuntime: this.services.modelRuntime,
+				tools,
+				skills,
+			},
+			sessionManager: openSessionManager({
+				cwd,
+				sessionsDir: this.ctx.config.sessionsDir,
+				path: row.session_path,
+			}),
+		});
+		const sessionFile = handle.session.sessionFile;
+		if (sessionFile && sessionFile !== row.session_path) {
+			this.ctx.repos.conversations.setSessionPathById(row.id, sessionFile);
+		}
+		return handle as SessionHandle;
+	}
+
 	/** Persist usage when a run settles (wired into the hub). */
 	recordRunEnd(conversationId: string, session: { getSessionStats(): unknown }): void {
 		try {
@@ -447,6 +513,8 @@ export class ConversationService {
 
 	/** Boot sweep: scratch dirs of conversations that no longer exist (spec/07 §5). */
 	sweepScratch(): void {
+		// spec/05-skills-and-tools.md §A.4: a test run older than an hour goes with it.
+		this.services.skillTests.sweep();
 		const root = this.ctx.config.paths.scratch;
 		try {
 			for (const entry of readdirSync(root, { withFileTypes: true })) {
@@ -507,6 +575,11 @@ export class ConversationService {
 		});
 	}
 
+	/** Marks a conversation as a skill test run for the client (spec §A.4). */
+	isEphemeral(row: ConversationRow): boolean {
+		return row.ephemeral === 1;
+	}
+
 	/** spec/05-skills-and-tools.md §B.4 — chat mode's resolved tool names. */
 	private resolvedToolNames(row: ConversationRow): string[] {
 		const resolved = this.services.tools.resolveChat({ webSearch: row.web_search === 1 });
@@ -514,6 +587,10 @@ export class ConversationService {
 	}
 
 	private resolvedTools(row: ConversationRow) {
+		if (row.ephemeral === 1) {
+			const granted = new Set(parseToolNames(row.ephemeral_tools));
+			return this.services.tools.list().filter((tool) => granted.has(tool.name));
+		}
 		const names = new Set(
 			row.mode === "agent" && row.profile_id
 				? this.services.profiles.resolve(row.profile_id).toolNames
@@ -529,6 +606,7 @@ export class ConversationService {
 	}
 
 	private systemPromptFor(row: ConversationRow): string {
+		if (row.ephemeral === 1) return "Skill test run.";
 		if (row.mode === "agent") {
 			// Fallback only: the real prompt comes from the live session (spec/09-api.md §8).
 			if (!row.profile_id) return "This conversation's profile was deleted.";

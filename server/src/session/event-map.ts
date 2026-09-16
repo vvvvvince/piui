@@ -4,6 +4,7 @@ import type { UiBlock, UiEvent, UiMessage } from "@piui/shared";
 import {
 	blocksOfAssistant,
 	costOf,
+	imageAttachmentsOf,
 	isAbortedMessage,
 	type MessageIds,
 	type PiMessage,
@@ -140,6 +141,9 @@ export class EventProjector {
 									typeof message.content === "string" ? message.content : textOfContent(message),
 							},
 						],
+						// spec/07-chat-mode.md §6.4 — the live frame must carry the images too, or the
+						// bubble only shows them after a reload (found in the browser).
+						...this.attachments(message),
 						createdAt: new Date(message.timestamp ?? this.now()).toISOString(),
 					},
 				},
@@ -260,6 +264,12 @@ export class EventProjector {
 		}
 	}
 
+	/** Image attachments of a user message, keyed like the transcript projection. */
+	private attachments(message: PiMessage): { attachments?: UiMessage["attachments"] } {
+		const attachments = imageAttachmentsOf(message.content, this.ids.conversationId);
+		return attachments.length > 0 ? { attachments } : {};
+	}
+
 	private onMessageEnd(message: PiMessage): ProjectedEvent[] {
 		const out: ProjectedEvent[] = this.flush();
 		this.buffers.clear();
@@ -272,6 +282,7 @@ export class EventProjector {
 						id,
 						role: "user",
 						blocks: [{ type: "text", id: `${id}:0`, text: textOfContent(message) }],
+						...this.attachments(message),
 						createdAt: new Date(message.timestamp ?? this.now()).toISOString(),
 					},
 				});

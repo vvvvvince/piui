@@ -48,6 +48,12 @@ export interface Config {
 	readonly logLevel: string;
 	readonly clientDist: string;
 	readonly dbPath: string;
+	/**
+	 * The `${ENV_VAR}` reader for HTTP-tool headers (spec/05-skills-and-tools.md §B.2). It lives
+	 * here because config.ts is the only module allowed to touch `process.env`, and the value is
+	 * resolved at call time — never stored, never returned.
+	 */
+	readonly readEnv: (name: string) => string | undefined;
 	readonly paths: {
 		readonly profiles: string;
 		readonly skills: string;
@@ -195,6 +201,7 @@ export function parseConfig(env: Env = process.env): ParsedConfig {
 		logLevel: env.PIUI_LOG_LEVEL ?? (env.NODE_ENV === "production" ? "info" : "debug"),
 		clientDist: resolve(env.PIUI_CLIENT_DIST ?? join(process.cwd(), "client", "dist")),
 		dbPath: join(home, "piui.db"),
+		readEnv: (name: string) => env[name],
 		paths: Object.freeze({
 			profiles: join(home, "profiles"),
 			skills: join(home, "skills"),

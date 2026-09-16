@@ -84,6 +84,25 @@ export interface Workspace {
 	updatedAt: string;
 }
 
+/** spec/05-skills-and-tools.md §A.2 — one row of the validator's error/warning table. */
+export interface SkillIssue {
+	code: string;
+	message: string;
+}
+
+export interface SkillValidation {
+	errors: SkillIssue[];
+	warnings: SkillIssue[];
+	/** No errors: the file may be saved (warnings never block). */
+	valid: boolean;
+}
+
+export interface SkillFileEntry {
+	/** Relative to the skill directory, POSIX separators. */
+	path: string;
+	size: number;
+}
+
 export interface SkillSummary {
 	id: string;
 	dirName: string;
@@ -94,7 +113,7 @@ export interface SkillSummary {
 	path: string;
 	/** Where a discovered skill came from (spec/15 §3.2); absent for piui-managed skills. */
 	location?: "user" | "project";
-	files?: string[];
+	files?: SkillFileEntry[];
 	warnings: string[];
 	/** spec/09-api.md §6 — profiles that selected this skill. */
 	usedByProfiles?: number;

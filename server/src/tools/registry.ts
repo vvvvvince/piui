@@ -90,6 +90,11 @@ export interface SearchProviderStatus {
 	readonly configured: boolean;
 }
 
+/** The slice of the HTTP-tool service the catalog needs (spec/05-skills-and-tools.md §B.1.3). */
+export interface HttpToolSource {
+	catalogItems(): { name: string; label: string; description: string; enabled: boolean }[];
+}
+
 /** The slice of the extension service the catalog needs (spec/16-extensions.md §4). */
 export interface ExtensionToolSource {
 	records(): {
@@ -105,6 +110,7 @@ export interface ToolRegistryDeps {
 	repos: Pick<Repositories, "tools">;
 	/** Absent in unit tests that only care about built-ins. */
 	extensions?: ExtensionToolSource;
+	httpTools?: HttpToolSource;
 	search: SearchProviderStatus;
 	logger: RegistryLogger;
 	/** Overridable for tests; production passes `process.platform`. */
@@ -188,9 +194,26 @@ export class ToolRegistry {
 			const available = spec.needsSearchProvider ? this.deps.search.configured : true;
 			push(spec, "builtin_piui", available);
 		}
+		// spec §B.1.3 — user-defined HTTP tools, always dangerous (they leave the machine).
+		const names = new Set(items.map((item) => item.name));
+		for (const tool of this.deps.httpTools?.catalogItems() ?? []) {
+			if (names.has(tool.name)) continue;
+			names.add(tool.name);
+			items.push({
+				name: tool.name,
+				label: tool.label,
+				description: tool.description,
+				kind: "http",
+				enabled: tool.enabled && !disabled.has(tool.name),
+				selectableInProfile: true,
+				dangerous: true,
+				configurable: true,
+				usedByProfiles: usage.get(tool.name) ?? 0,
+			});
+		}
 		// spec/16-extensions.md §4 — extension-registered tools, cached by the probe. A name that
 		// collides with a built-in is dropped here, so it can never shadow `bash`/`read`/….
-		const builtinNames = new Set(items.map((item) => item.name));
+		const builtinNames = names;
 		for (const extension of this.deps.extensions?.records() ?? []) {
 			if (!extension.enabled || extension.loadError) continue;
 			for (const name of extension.tools) {

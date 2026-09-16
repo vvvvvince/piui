@@ -994,3 +994,171 @@ and `repository scoping > keeps workspaces scoped the same way` failed by name (
   for a handful, but if an installation ever grows dozens, cache on mtime.
 - `piui-notices` (§6's single inline `InlineExtension`) is still not built: `onError` →
   `notice` covers what it was for, and `extensionFactories` stays `[]`.
+
+---
+
+## M6 — Skills & tools management UI ✅
+
+**Shipped**
+
+- *Spike S13* (`plan/spikes/12-skill-objects-and-test-run.md`) before any code. Five facts drove
+  the design: pi's `Skill` needs only `name`/`description`/`filePath`/`baseDir`, and **pi never
+  enumerates the skill directory** — `baseDir` appears only in `/skill:`'s "References are
+  relative to …" line, so a multi-file skill is reachable *only* through a tool call; the
+  `<available_skills>` block carries name + description + location and nothing else;
+  `_expandSkillCommand` inlines the **whole** body with no truncation (a 30 KB skill costs 30 KB
+  of context, and an empty body yields an empty block, no error); a skill outside the session
+  `cwd` loads fine and pi's `read` reaches any absolute path; therefore B.5.6 is assertable
+  offline by scripting the fake provider's `read`.
+- `server/src/skills/validate.ts` — the whole §A.2 table as a pure function (`validateSkill`,
+  `composeSkillMd`, `splitSkillMd`, `skillDirName`, `referencedPaths`), unit-tested row by row.
+  `parseFrontmatter` moved here and is re-exported by the catalog, so there is one parser.
+- `server/src/skills/service.ts` — the write path around M5b's read-only catalog: create from
+  `basic|script|reference`, `PATCH` (form **or** raw, always validated *before* the write),
+  per-file `GET/PUT/DELETE …/files/*` with a `resolve`+`relative` traversal guard and the 512 KB
+  cap, delete → `$PIUI_HOME/trash/skills/<dir>-<ts>/` + `affectedProfiles`, external skills
+  read-only (`skill_not_editable`, unregister only), rescan, and the three imports.
+- `server/src/skills/zip.ts` — a ~150-line zip reader on `zlib.inflateRawSync`, **no
+  dependency**. It parses the central directory, refuses `..`/absolute/drive-letter/NUL names
+  and symlinks (unix mode `0120000` in the external attributes), refuses >500 entries, >1 MB per
+  entry and >50 MB total **by the declared sizes before inflating**, then re-checks the actual
+  inflated bytes (`maxOutputLength`) because a central directory can lie. Nothing is written
+  until every entry passed.
+- `POST /api/skills/:id/test` + `server/src/skills/test-run.ts` — an ephemeral conversation
+  (`ephemeral = 1`, `skill_id`, `ephemeral_tools` in migration `004`): only that skill,
+  `tools: ["read"]` (+`bash` on request), an empty scratch cwd, auto prompt `/skill:<name>`,
+  never listed, swept after 1 h next to M2's scratch sweep.
+- `server/src/tools/http-tools.ts` (pure: name rule, schema builder, `{param}` renderers,
+  placeholder/JSON/timeout validation), `HttpToolRepository`, `HttpToolService` (CRUD, masking,
+  the Test call) and `server/src/pi/tools/http-tool.ts` (the pi custom tool: `{param}`
+  URL-encoded in the URL and JSON-encoded in the body, `${ENV_VAR}` resolved at call time, the
+  **shared** `safeFetch` SSRF guard, 32 KB truncation, `details: { status, url, durationMs }`,
+  non-2xx thrown with the body snippet).
+- `ToolKind: "http"` in the catalog (always `dangerous`, selectable in profiles) and in
+  `resolveTools` — an HTTP tool lands in `customToolNames`, and `createPiSession` builds its
+  runtime through `httpTools.toolsFor(toolNames)`.
+- Uploads (`server/src/uploads/service.ts` + routes): magic-byte sniffing (PNG/JPEG/GIF/WebP),
+  `PIUI_MAX_UPLOAD_MB`, storage under `$PIUI_HOME/uploads/<conversationId>/`, inline serving with
+  `Content-Security-Policy: sandbox` + `nosniff`, and `attachments` on `POST …/messages` (upload
+  id **or** inline base64), projected into `UiMessage.attachments` in both the snapshot and the
+  live SSE frame.
+- Client: `/skills` (list with source/location badges, file count, usage, warning icon, search,
+  New/Import/Rescan, in-app delete dialog naming the affected profiles) with the editor (file
+  tree + add/delete, frontmatter form, **CodeMirror 6** body/raw/file editor, validation panel,
+  Save, Save & test → the ephemeral conversation); the `HttpToolEditor` on `/tools` (schema
+  builder, header rows, Test with the response echoed, in-app delete dialog); and the composer's
+  attach button + paste/drop + thumbnail tray, with images rendered in the user bubble.
+
+**Verified by hand (Firefox via MCP, dev server on `/tmp/piui-m6-home` + `/tmp/piui-m6-roots`)**
+
+1. **New skill** from the `script` template → `SKILL.md` + `scripts/run.sh` on disk, editor open
+   with the frontmatter form, CodeMirror body and the "name differs from directory" warning. ✅
+2. Clearing the description and pressing **Save** → `400 skill_invalid`, *"Not saved: Frontmatter
+   is missing `description`…"* under the validation panel, **file unchanged on disk**. Restoring
+   it saved. ✅ (B.5.5)
+3. Adding `references/api.md` in the tree, then **Save & test** → the ephemeral conversation
+   *Test: demo skill* with the typed `/skill:demo skill`, a real `read` of
+   `/tmp/piui-m6-home/skills/demo-skill/SKILL.md`, `tools: read` under the composer, and it does
+   **not** appear in the conversation list. ✅ (B.5.6)
+4. Importing a zip whose entry is `zipped-skill/../../escape.md` → *"… escapes the skill
+   directory with `..`"*, nothing written; the clean archive imported as `zipped-skill` with its
+   `references/api.md`; registering `/tmp/piui-m6-external/pdf-tools` added it as
+   `external · user`. ✅
+5. Deleting a skill a profile selects → in-app dialog: *"These profiles lose the skill: Read-only
+   reviewer."* plus the trash sentence and the file count. ✅ (A.5)
+6. HTTP tool `weather` created against a local stub with `authorization: Bearer ${DEMO_TOKEN}`:
+   re-opening it shows `***`, `GET /api/tools/http` and `/api/tools` never contain the stored
+   value, and **Test** against `http://127.0.0.1:9911` was refused — *"refusing to fetch a private
+   address: 127.0.0.1"*. ✅ (B.5.3)
+7. With `PIUI_ALLOW_PRIVATE_HTTP_TOOLS=1` + `DEMO_TOKEN=s3cret-from-env`: **Test** returned
+   `200 · 14 ms` with the stub's JSON, and the stub logged `Bearer s3cret-from-env` — the env ref
+   is resolved at call time, server-side only. An agent conversation on a profile selecting
+   `weather` then called it live (`weather · ok` card, answer from the stub). ✅
+8. Attaching a PNG in a chat: thumbnail tray, the image in the user bubble **while streaming**
+   (see the deviation below), and the file served `200 · image/png · inline · CSP sandbox`. ✅
+   (`07-chat-mode#6.4`, `09-api#10`)
+9. Production build (`npm run build && NODE_ENV=production node server/dist/index.js`, port
+   8799): skill create + validate + test-run transcript, an HTTP tool created, tested and
+   **called inside an agent conversation**, and an upload round trip with the sandbox CSP — all
+   on one port. ✅
+10. Suite: 424 tests green, offline, ~16 s; lint + strict typecheck clean.
+
+**Deviations / decisions**
+
+- *Open item 1 — the editor writes per Save, never stages.* `PATCH /api/skills/:id` recomposes
+  `SKILL.md` from the form (or takes `raw`) and **validates before writing**, so the UI cannot
+  leave a skill unparseable; other files are written by their own `PUT`. A profile whose skill
+  becomes invalid *outside* piui keeps M5's behaviour: resolution warns and drops, the list shows
+  the warning icon, and the row is never deleted.
+- *Open item 2 — validation is computed per request, not cached.* The spec suggests an
+  `updated_at`-keyed cache; it is one file read plus a `readdir`, and the case the panel exists
+  for is precisely a hand edit that a cache would miss. Same reasoning as M5b's per-request
+  prompt composition.
+- *Open item 3 — the test run is a flagged conversation, not a table.* `ephemeral = 1` keeps the
+  whole transcript/SSE/abort/stats machinery; `list()` filters it out, the model is the request's
+  → the most recent conversation's → the first available one, and it *does* appear on the global
+  SSE channel (the hub cannot tell it apart, and the sidebar only renders the list route).
+  Sweeping runs on boot and before every new test run.
+- *Open item 4 — header storage.* The value is stored verbatim (ideally a `${ENV_VAR}` ref),
+  resolved at call time by `config.readEnv` (config.ts stays the only module touching
+  `process.env`), and **every** read answers `"***"`. A PATCH that echoes `"***"` back keeps the
+  stored value; `""` deletes the row. The test endpoint returns `{ status, durationMs, body,
+  truncated }` — the response only, never the request headers.
+- *Open item 5 — HTTP-tool CRUD is admin-only*, reads included. `18-multi-user.md` §5 lists only
+  `PATCH /api/tools/:name`, but an HTTP tool makes outbound calls from this host with server-side
+  secrets — the blast radius of an extension, which §5 does list; reads expose the URLs and header
+  names. Recorded in `http/authz.ts` and covered by a test over all six routes.
+- *Open item 6 — uploads.* Both paths are supported and both store the file: the client uses
+  `POST /api/uploads` (it already has the `File`), inline base64 stays available per §10. The
+  upload id is `sha256(bytes)[0..32].<ext>`, which is what lets the transcript rebuild the URL
+  with **no mapping table** (and dedupes re-uploads). Deleting a conversation still removes the
+  directory (M2).
+- *CodeMirror 6 landed here* (`@uiw/react-codemirror` + `@codemirror/lang-markdown`, one
+  `CodeEditor` component) for the skill body, raw mode and per-file editing. The extension source
+  editor and the AGENTS.md textarea do **not** use it yet — re-parked to M7 with the rest of the
+  UX pass (`10-frontend#4`), since both already have a working plain editor.
+- *The zip reader is homegrown* (see above): node's `zlib` plus ~150 lines beats a dependency
+  whose own extraction logic would have to be audited for exactly the traversal rules §A.4 names.
+- *`ctx.lookup` is now injectable* next to `ctx.fetch`; the test harness's default **throws**, so
+  no test can resolve a real hostname. The HTTP-tool runtime and `web_fetch` share the guard.
+- *The fake model is now vision-capable* (`input: ["text", "image"]`) so the attach path is
+  exercisable offline; it is registered only under `PIUI_FAKE_MODEL=1`.
+- **Browser-only bug (the M6 one): the live SSE frame dropped image attachments.**
+  `projectTranscript` carried them, so the picture appeared only after a reload;
+  `EventProjector.onMessageStart/onMessageEnd` now project them through the same
+  `imageAttachmentsOf`. Covered by `[07-chat-mode#6.4] carries the attachment on the live SSE
+  frame…`, which fails when the line is removed.
+- *Second browser finding:* a refused Save rendered only in the page-level banner, above the fold
+  once the editor is open. The editor now shows `Not saved: …` next to the Save button
+  (`skill-save-error`), tested in `SkillsPage.test.tsx`.
+- *Third (component-test) finding:* the HTTP-tool parameter/header rows were keyed by their
+  value, so every keystroke remounted the input and stole focus. Keys are positional now, with
+  the reason in a `biome-ignore`.
+
+**Mutation spot-check (§9.6)** — three mutants, all caught by name:
+
+1. disabled the `..` arm of `assertSafePath` in `skills/zip.ts` ⇒ `[11-security#3] refuses an
+   entry escaping with ..` and `[11-security#3] refuses a zip whose entry escapes the skill
+   directory and writes nothing` failed (2 failed, 313 passed).
+2. returned the raw `headers` map instead of the masked one from `HttpToolService.view` ⇒
+   `[05-skills-and-tools#B.2] never returns a stored header value through any route` failed
+   (1 failed, 314 passed).
+3. made `UploadService.store` accept anything by defaulting the sniff to PNG ⇒
+   `[11-security#3] refuses a file whose magic bytes are not an image, whatever it claims`
+   failed (1 failed, 314 passed). All reverted. ✅
+
+**Open for M7**
+
+- `ExtensionSourceEditor` and the AGENTS.md editor still use plain textareas; `CodeEditor` is
+  there to be dropped in during the UX pass.
+- The HTTP-tool card in a transcript uses the generic renderer (`weather · ok`); a dedicated
+  renderer showing status/duration would read better.
+- `GET /api/skills` re-validates every skill on every read (one file read + `readdir` each).
+  Fine for dozens; if a deployment ever holds hundreds, cache on `mtime` like the extension probe.
+- Skill *files* have no rename and no folder creation beyond "write a path"; `[LATER]` per §A.4's
+  git-clone/registry install.
+- `09-api.md` §6 documents the zip import on `POST /api/skills/import`; piui serves multipart on
+  `POST /api/skills/import-zip` because fastify routes one path to one content-type parser. Worth
+  a spec erratum in M7.
+- The ephemeral test run is visible on the global SSE channel; if M7's sidebar badges count
+  conversations from that channel, they must filter `ephemeral`.

@@ -114,6 +114,8 @@ export async function registerConversationRoutes(
 	app.post<{ Params: { id: string }; Body: PostMessageRequest }>(
 		"/api/conversations/:id/messages",
 		{
+			// Inline base64 images ride in the JSON body (spec/09-api.md §10).
+			bodyLimit: 12 * 1024 * 1024,
 			schema: {
 				body: {
 					type: "object",
@@ -122,6 +124,20 @@ export async function registerConversationRoutes(
 					properties: {
 						text: { type: "string", minLength: 1 },
 						streamingBehavior: { type: "string", enum: ["steer", "followUp"] },
+						// spec/09-api.md §10 — the client SHOULD use POST /api/uploads above 256 KB.
+						attachments: {
+							type: "array",
+							maxItems: 8,
+							items: {
+								type: "object",
+								additionalProperties: false,
+								properties: {
+									uploadId: { type: "string", maxLength: 80 },
+									mimeType: { type: "string", maxLength: 64 },
+									data: { type: "string" },
+								},
+							},
+						},
 					},
 				},
 			},
@@ -132,6 +148,7 @@ export async function registerConversationRoutes(
 				req.params.id,
 				req.body.text,
 				req.body.streamingBehavior,
+				req.body.attachments,
 			);
 			reply.status(202);
 			return { accepted: true, queuedAs };

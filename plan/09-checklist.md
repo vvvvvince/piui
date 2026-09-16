@@ -117,11 +117,11 @@ Rule for every line below: **failing test first**, then code, then refactor, com
 - [x] **Gate:** `16-extensions#10.1–10.10`
 
 ## M6 — skills & tools UI
-- [ ] skill CRUD + files + import + rescan + validate + trash + counts
-- [ ] skill test-run ephemeral conversation
-- [ ] HTTP tool CRUD + schema builder + test + runtime with SSRF guard
-- [ ] image uploads end to end (magic bytes, caps, inline serving)
-- [ ] **Gate:** `05-skills-and-tools` A/B lists
+- [x] skill CRUD + files + import + rescan + validate + trash + counts
+- [x] skill test-run ephemeral conversation
+- [x] HTTP tool CRUD + schema builder + test + runtime with SSRF guard
+- [x] image uploads end to end (magic bytes, caps, inline serving)
+- [x] **Gate:** `05-skills-and-tools` A/B lists
 
 ## M7 — hardening
 - [ ] headers/CSP, audit log, redaction, run caps, subscriber caps

@@ -7,9 +7,11 @@ import type { Config } from "./config.js";
 import { type Db, openDb } from "./db/index.js";
 import { createRepositories, type Repositories } from "./db/repositories/index.js";
 import { type AuthProvider, StaticAuthProvider } from "./http/auth.js";
+import { systemLookup } from "./net/ssrf.js";
 import { type Clock, type IdGen, systemClock, systemIdGen } from "./util/clock.js";
 
 export type FetchLike = typeof fetch;
+export type LookupLike = (hostname: string) => Promise<string[]>;
 export type SleepFn = (ms: number) => Promise<void>;
 
 const realSleep: SleepFn = (ms) =>
@@ -25,6 +27,8 @@ export interface AppContext {
 	ids: IdGen;
 	logger: Logger;
 	fetch: FetchLike;
+	/** DNS for the SSRF guard — injected so no test resolves a real name. */
+	lookup: LookupLike;
 	/** Injected so the artificial login delay never slows the suite down. */
 	sleep: SleepFn;
 	authProvider: AuthProvider;
@@ -39,6 +43,7 @@ export interface CreateContextOptions {
 	ids?: IdGen;
 	logger?: Logger;
 	fetch?: FetchLike;
+	lookup?: LookupLike;
 	sleep?: SleepFn;
 	/** The only wiring line that knows which AuthProvider is in use (spec/06-auth.md §8.6). */
 	authProvider?: AuthProvider;
@@ -87,6 +92,7 @@ export function createContext(options: CreateContextOptions): AppContext {
 		ids,
 		logger,
 		fetch: options.fetch ?? globalThis.fetch,
+		lookup: options.lookup ?? systemLookup,
 		sleep: options.sleep ?? realSleep,
 		authProvider: options.authProvider ?? new StaticAuthProvider(config.username, config.password),
 		version: readVersion(join(pkgDir, "package.json"), "0.0.0"),

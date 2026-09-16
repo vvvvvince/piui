@@ -92,6 +92,25 @@ export class SkillRepository extends Repository {
 		for (const id of ids) disable.run(this.clock.nowIso(), id);
 	}
 
+	setEnabled(id: string, enabled: boolean): void {
+		this.db
+			.prepare("UPDATE skills SET enabled = ?, updated_at = ? WHERE id = ?")
+			.run(enabled ? 1 : 0, this.clock.nowIso(), id);
+	}
+
+	/** spec/05-skills-and-tools.md §A.5 — the names the delete dialog must list. */
+	profilesUsing(skillId: string): string[] {
+		return (
+			this.db
+				.prepare(
+					`SELECT p.name AS name FROM profile_skills ps
+					 JOIN profiles p ON p.id = ps.profile_id
+					 WHERE ps.skill_id = ? ORDER BY p.name`,
+				)
+				.all(skillId) as { name: string }[]
+		).map((row) => row.name);
+	}
+
 	/** skill id -> number of profiles that selected it. */
 	profileUsage(): Map<string, number> {
 		const rows = this.db

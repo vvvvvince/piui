@@ -19,6 +19,10 @@ export interface ConversationRow {
 	cost_total: number;
 	title_locked: number;
 	timezone: string | null;
+	/** spec/05-skills-and-tools.md §A.4 — a skill test run: never listed, swept after 1 h. */
+	ephemeral: number;
+	skill_id: string | null;
+	ephemeral_tools: string | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -34,6 +38,9 @@ export interface CreateConversationInput {
 	webSearch?: boolean;
 	timezone?: string | null;
 	titleLocked?: boolean;
+	/** A skill test run (spec/05-skills-and-tools.md §A.4). */
+	ephemeral?: boolean;
+	skillId?: string | null;
 }
 
 /**
@@ -48,17 +55,18 @@ export class ConversationRepository extends Repository {
 		const where = ownWhere(principal);
 		const archived = options.archived === undefined ? null : options.archived ? 1 : 0;
 		const limit = Math.min(options.limit ?? 50, 200);
+		// Ephemeral test runs are never listed (spec/05-skills-and-tools.md §A.4).
 		if (archived === null) {
 			return this.db
 				.prepare(
-					`SELECT * FROM conversations WHERE ${where.sql}
+					`SELECT * FROM conversations WHERE ${where.sql} AND ephemeral = 0
 					 ORDER BY COALESCE(last_message_at, created_at) DESC LIMIT ?`,
 				)
 				.all(...where.params, limit) as ConversationRow[];
 		}
 		return this.db
 			.prepare(
-				`SELECT * FROM conversations WHERE ${where.sql} AND archived = ?
+				`SELECT * FROM conversations WHERE ${where.sql} AND ephemeral = 0 AND archived = ?
 				 ORDER BY COALESCE(last_message_at, created_at) DESC LIMIT ?`,
 			)
 			.all(...where.params, archived, limit) as ConversationRow[];
@@ -94,8 +102,9 @@ export class ConversationRepository extends Repository {
 		this.db
 			.prepare(
 				`INSERT INTO conversations (id, owner_id, title, mode, provider, model_id, thinking_level,
-					profile_id, workspace_id, web_search, timezone, title_locked, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					profile_id, workspace_id, web_search, timezone, title_locked, ephemeral, skill_id,
+					created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -110,6 +119,8 @@ export class ConversationRepository extends Repository {
 				input.webSearch ? 1 : 0,
 				input.timezone ?? null,
 				input.titleLocked || input.title ? 1 : 0,
+				input.ephemeral ? 1 : 0,
+				input.skillId ?? null,
 				now,
 				now,
 			);
@@ -272,6 +283,13 @@ export class ConversationRepository extends Repository {
 			.run(sessionPath, this.clock.nowIso(), id);
 	}
 
+	/** spec/05-skills-and-tools.md §A.4 — the tool allowlist a revived test run rebuilds with. */
+	setEphemeralTools(id: string, tools: readonly string[]): void {
+		this.db
+			.prepare("UPDATE conversations SET ephemeral_tools = ?, updated_at = ? WHERE id = ?")
+			.run(JSON.stringify(tools), this.clock.nowIso(), id);
+	}
+
 	setArchived(principal: Principal, id: string, archived: boolean): void {
 		this.getOrThrow(principal, id);
 		this.db
@@ -282,5 +300,16 @@ export class ConversationRepository extends Repository {
 	delete(principal: Principal, id: string): void {
 		this.getOrThrow(principal, id);
 		this.db.prepare("DELETE FROM conversations WHERE id = ?").run(id);
+	}
+
+	deleteById(id: string): void {
+		this.db.prepare("DELETE FROM conversations WHERE id = ?").run(id);
+	}
+
+	/** spec/05-skills-and-tools.md §A.4 — test runs older than the cutoff, for the sweep. */
+	expiredEphemeral(cutoffIso: string): ConversationRow[] {
+		return this.db
+			.prepare("SELECT * FROM conversations WHERE ephemeral = 1 AND created_at < ?")
+			.all(cutoffIso) as ConversationRow[];
 	}
 }

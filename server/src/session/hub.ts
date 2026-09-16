@@ -20,7 +20,14 @@ export interface HubSession {
 	readonly systemPrompt: string;
 	readonly sessionFile: string | undefined;
 	subscribe(listener: (event: { type: string; [key: string]: unknown }) => void): () => void;
-	prompt(text: string, options?: { streamingBehavior?: "steer" | "followUp" }): Promise<void>;
+	prompt(
+		text: string,
+		options?: {
+			streamingBehavior?: "steer" | "followUp";
+			/** Image attachments (spec/07-chat-mode.md §6.4); pi's `ImageContent[]`. */
+			images?: { type: "image"; data: string; mimeType: string }[];
+		},
+	): Promise<void>;
 	abort(): Promise<void>;
 	clearQueue(): { steering: string[]; followUp: string[] };
 	// pi 0.85.1 exposes the queue as two getters, not the `getPendingMessages()` of spike S7.
@@ -166,7 +173,7 @@ export class ConversationChannel {
 }
 
 export class LiveSession {
-	readonly ids = new MessageIds();
+	readonly ids: MessageIds;
 	readonly projector: EventProjector;
 	private readonly unsubscribe: () => void;
 	private flushTimer: NodeJS.Timeout | undefined;
@@ -184,6 +191,7 @@ export class LiveSession {
 		private readonly deps: HubDeps,
 		readonly channel: ConversationChannel = new ConversationChannel(),
 	) {
+		this.ids = new MessageIds(conversationId);
 		this.projector = new EventProjector({ ids: this.ids });
 		this.lastActivityMs = deps.nowMs();
 		this.unsubscribe = handle.session.subscribe((event) => this.ingest(event));
@@ -457,9 +465,11 @@ export class SessionHub {
 		conversationId: string,
 		text: string,
 		streamingBehavior?: "steer" | "followUp",
+		images?: readonly { type: "image"; data: string; mimeType: string }[],
 	): Promise<"steer" | "followUp" | null> {
 		const live = await this.ensure(conversationId);
 		live.noteTyped(text);
+		const attached = images && images.length > 0 ? (images as never) : undefined;
 		if (live.session.isStreaming) {
 			if (!streamingBehavior) {
 				throw new ApiError(
@@ -467,7 +477,10 @@ export class SessionHub {
 					"This conversation is still streaming; steer it or queue a follow-up.",
 				);
 			}
-			await live.session.prompt(text, { streamingBehavior });
+			await live.session.prompt(text, {
+				streamingBehavior,
+				...(attached ? { images: attached } : {}),
+			});
 			return streamingBehavior;
 		}
 		if (this.running >= this.deps.maxConcurrentRuns) {
@@ -476,7 +489,7 @@ export class SessionHub {
 		this.running += 1;
 		// The route must not await the run: prompt() resolves when the run settles.
 		void live.session
-			.prompt(text)
+			.prompt(text, attached ? { images: attached } : undefined)
 			.catch(() => {
 				/* errors reach the client as events */
 			})

@@ -1,5 +1,6 @@
 // pi messages -> UiMessage[] (spec/02-data-model.md §4, spike plan/spikes/05).
 // Deliberately structural: the projection layer must not import pi (grep-tested).
+import { createHash } from "node:crypto";
 import type { UiBlock, UiMessage } from "@piui/shared";
 
 export const TOOL_OUTPUT_LIMIT = 16 * 1024;
@@ -39,6 +40,9 @@ export class MessageIds {
 	private readonly ids = new WeakMap<object, string>();
 	private n = 0;
 
+	/** Needed to build upload URLs for image attachments (spec/09-api.md §10). */
+	constructor(readonly conversationId: string = "") {}
+
 	/** Pin a (new) message object to an id already handed out — pi swaps the object on end. */
 	assign(message: object, id: string): void {
 		this.ids.set(message, id);
@@ -52,6 +56,39 @@ export class MessageIds {
 		this.ids.set(message, id);
 		return id;
 	}
+}
+
+/**
+ * spec/07-chat-mode.md §6.4 — images a user attached. The stored upload is named by the sha256
+ * of its bytes, so the URL is recomputed here without any mapping table; an image that was
+ * inlined as base64 instead (the small-image path) falls back to a data URL.
+ */
+export function imageAttachmentsOf(
+	content: PiMessage["content"],
+	conversationId: string,
+): NonNullable<UiMessage["attachments"]> {
+	if (!Array.isArray(content)) return [];
+	const out: NonNullable<UiMessage["attachments"]> = [];
+	for (const item of content) {
+		if (item.type !== "image") continue;
+		const image = item as unknown as { data: string; mimeType: string };
+		const id = uploadIdOf(image.data, image.mimeType);
+		out.push({
+			id,
+			kind: "image",
+			mimeType: image.mimeType,
+			url: conversationId
+				? `/api/uploads/${conversationId}/${id}`
+				: `data:${image.mimeType};base64,${image.data}`,
+		});
+	}
+	return out;
+}
+
+/** The upload id is `sha256(bytes)[0..32].<ext>` — the same rule the upload service applies. */
+export function uploadIdOf(base64: string, mimeType: string): string {
+	const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.replace("image/", "");
+	return `${createHash("sha256").update(Buffer.from(base64, "base64")).digest("hex").slice(0, 32)}.${ext}`;
 }
 
 export function textOf(content: PiMessage["content"]): string {
@@ -150,10 +187,12 @@ export function projectTranscript(messages: readonly unknown[], ids: MessageIds)
 		const createdAt = new Date(message.timestamp ?? Date.now()).toISOString();
 
 		if (message.role === "user") {
+			const attachments = imageAttachmentsOf(message.content, ids.conversationId);
 			out.push({
 				id,
 				role: "user",
 				blocks: [{ type: "text", id: `${id}:0`, text: textOf(message.content) }],
+				...(attachments.length > 0 ? { attachments } : {}),
 				createdAt,
 			});
 			continue;

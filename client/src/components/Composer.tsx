@@ -3,10 +3,17 @@
 import type { CommandDescriptor } from "@piui/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+/** spec/09-api.md §10 — what a prompt carries besides text. */
+export interface ComposerAttachment {
+	uploadId: string;
+	url: string;
+	mimeType: string;
+}
+
 export interface ComposerHandlers {
-	onSend(text: string): unknown;
-	onSteer(text: string): unknown;
-	onFollowUp(text: string): unknown;
+	onSend(text: string, attachments?: ComposerAttachment[]): unknown;
+	onSteer(text: string, attachments?: ComposerAttachment[]): unknown;
+	onFollowUp(text: string, attachments?: ComposerAttachment[]): unknown;
 	/** Aborts the run; resolves with the queued text to restore in the composer. */
 	onAbort(): Promise<string>;
 	/** Clears the queue without aborting; resolves with the dequeued text. */
@@ -23,6 +30,10 @@ export interface ComposerProps {
 	commands?: CommandDescriptor[];
 	/** Executes a `client` / `server` command; `expand` commands go to the model unchanged. */
 	onCommand?(command: CommandDescriptor, args: string): void;
+	/** spec/07-chat-mode.md §3 — only when the model accepts images. */
+	imagesSupported?: boolean;
+	/** Uploads one file and resolves with what the prompt should reference. */
+	onUpload?(file: File): Promise<ComposerAttachment>;
 	/** Rendered next to the hint row (globe toggle, model chip, …). */
 	children?: React.ReactNode;
 }
@@ -77,14 +88,33 @@ export function Composer({
 	disabledReason,
 	commands,
 	onCommand,
+	imagesSupported,
+	onUpload,
 	children,
 }: ComposerProps): JSX.Element {
 	const [text, setText] = useState("");
+	const [attached, setAttached] = useState<ComposerAttachment[]>([]);
+	const fileRef = useRef<HTMLInputElement>(null);
 	const [historyIndex, setHistoryIndex] = useState<number | null>(null);
 	const [menuClosed, setMenuClosed] = useState(false);
 	const [highlight, setHighlight] = useState(0);
 	const [error, setError] = useState<string | null>(null);
 	const ref = useRef<HTMLTextAreaElement>(null);
+
+	const attach = useCallback(
+		async (file: File): Promise<void> => {
+			if (!onUpload) return;
+			try {
+				setAttached((current) => [...current, { uploadId: "pending", url: "", mimeType: "" }]);
+				const uploaded = await onUpload(file);
+				setAttached((current) => [...current.filter((a) => a.uploadId !== "pending"), uploaded]);
+			} catch (uploadError) {
+				setAttached((current) => current.filter((a) => a.uploadId !== "pending"));
+				setError((uploadError as Error).message);
+			}
+		},
+		[onUpload],
+	);
 
 	const prefix = commandPrefix(text);
 	const matches =
@@ -134,11 +164,19 @@ export function Composer({
 			pushHistory(conversationId, value);
 			setText("");
 			setHistoryIndex(null);
-			if (mode === "send") handlers.onSend(value);
-			else if (mode === "steer") handlers.onSteer(value);
-			else handlers.onFollowUp(value);
+			const images = attached.length > 0 ? [...attached] : undefined;
+			setAttached([]);
+			const handler =
+				mode === "send"
+					? handlers.onSend
+					: mode === "steer"
+						? handlers.onSteer
+						: handlers.onFollowUp;
+			// No attachments: call with one argument, so "send this text" stays the simple case.
+			if (images) handler(value, images);
+			else handler(value);
 		},
-		[text, conversationId, handlers, commands, onCommand, streaming],
+		[text, conversationId, handlers, commands, onCommand, streaming, attached],
 	);
 
 	const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -267,7 +305,57 @@ export function Composer({
 					{error}
 				</p>
 			)}
+			{attached.length > 0 && (
+				<ul className="mb-2 flex flex-wrap gap-2" data-testid="composer-attachments">
+					{attached.map((attachment) => (
+						<li key={attachment.uploadId} className="relative">
+							<img
+								src={attachment.url}
+								alt="attachment"
+								className="h-14 w-14 rounded border border-slate-700 object-cover"
+							/>
+							<button
+								type="button"
+								aria-label="Remove attachment"
+								className="absolute -right-1 -top-1 rounded-full bg-slate-800 px-1 text-[10px] text-slate-300"
+								onClick={() =>
+									setAttached(attached.filter((a) => a.uploadId !== attachment.uploadId))
+								}
+							>
+								✕
+							</button>
+						</li>
+					))}
+				</ul>
+			)}
 			<div className="flex items-end gap-2">
+				<input
+					ref={fileRef}
+					type="file"
+					accept="image/png,image/jpeg,image/gif,image/webp"
+					className="hidden"
+					data-testid="composer-file-input"
+					onChange={(event) => {
+						const file = event.target.files?.[0];
+						event.target.value = "";
+						if (file) void attach(file);
+					}}
+				/>
+				<button
+					type="button"
+					data-testid="composer-attach"
+					aria-label="Attach image"
+					title={
+						imagesSupported === false
+							? "This model does not accept images"
+							: "Attach an image (or paste one)"
+					}
+					className="rounded border border-slate-700 px-2 py-2 text-sm disabled:opacity-40"
+					disabled={disabled === true || imagesSupported === false || !onUpload}
+					onClick={() => fileRef.current?.click()}
+				>
+					📎
+				</button>
 				<textarea
 					ref={ref}
 					aria-label="Message"
@@ -283,6 +371,22 @@ export function Composer({
 						setError(null);
 					}}
 					onKeyDown={onKeyDown}
+					onPaste={(event) => {
+						// spec/10-frontend.md §2: Ctrl+V attaches an image.
+						const file = [...event.clipboardData.files][0];
+						if (file?.type.startsWith("image/")) {
+							event.preventDefault();
+							void attach(file);
+						}
+					}}
+					onDragOver={(event) => event.preventDefault()}
+					onDrop={(event) => {
+						const file = [...event.dataTransfer.files][0];
+						if (file?.type.startsWith("image/")) {
+							event.preventDefault();
+							void attach(file);
+						}
+					}}
 				/>
 				{streaming ? (
 					<button

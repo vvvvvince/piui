@@ -191,7 +191,8 @@ export function registerFakeProvider(
 			id,
 			name: `Fake ${id}`,
 			reasoning: true,
-			input: ["text" as const],
+			// The fake model is vision-capable so the attach-image path is exercisable offline.
+			input: ["text" as const, "image" as const],
 			cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 },
 			contextWindow,
 			maxTokens: 4096,

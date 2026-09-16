@@ -17,7 +17,11 @@ import { createSearchProvider, type WebSearchProvider } from "./search/providers
 import { GlobalEventBus } from "./session/bus.js";
 import { SessionHub } from "./session/hub.js";
 import { SkillCatalog } from "./skills/catalog.js";
+import { SkillService } from "./skills/service.js";
+import { SkillTestRunner } from "./skills/test-run.js";
+import { HttpToolService } from "./tools/http-tool-service.js";
 import { ToolRegistry } from "./tools/registry.js";
+import { UploadService } from "./uploads/service.js";
 import { WorkspaceService } from "./workspaces/service.js";
 
 export interface Services {
@@ -33,11 +37,19 @@ export interface Services {
 	extensions: ExtensionService;
 	profiles: ProfileService;
 	skills: SkillCatalog;
+	/** The skill write path: CRUD, per-file routes, import and validation (spec/05 §§A.2-A.5). */
+	skillWrites: SkillService;
+	/** `POST /api/skills/:id/test` — the ephemeral test conversation (spec/05 §A.4). */
+	skillTests: SkillTestRunner;
 	/** The per-profile memory file store; owns the append mutex. */
 	memory: MemoryStore;
 	/** The configured web-search provider (`none` when unset). */
 	search: WebSearchProvider;
 	tools: ToolRegistry;
+	/** Image uploads: magic-byte validation, storage and inline serving (spec/09-api.md §10). */
+	uploads: UploadService;
+	/** User-defined HTTP tools: CRUD, the test call and the runtime factory (spec/05 §B.2). */
+	httpTools: HttpToolService;
 	workspaces: WorkspaceService;
 	/** One tool set per pi session: the per-run search budget lives in it. */
 	createWebToolSet(): WebToolSet;
@@ -62,9 +74,22 @@ export async function createServices(ctx: AppContext): Promise<Services> {
 		// deliberately not dropped (a dropped session would lose its pending ui_requests).
 		onChanged: () => events.emit({ type: "extensions_changed" }),
 	});
-	const tools = new ToolRegistry({ repos: ctx.repos, search, logger: ctx.logger, extensions });
+	const httpTools: HttpToolService = new HttpToolService(ctx, () => tools, {
+		onChanged: () => events.emit({ type: "skills_changed" }),
+	});
+	const tools: ToolRegistry = new ToolRegistry({
+		repos: ctx.repos,
+		search,
+		logger: ctx.logger,
+		extensions,
+		httpTools,
+	});
 	tools.validateAgainstPi(installedBuiltinToolNames());
 	const skills = new SkillCatalog(ctx);
+	const skillWrites = new SkillService(ctx, skills, {
+		// The command surface and every session's ResourceLoader hold the skill set.
+		onChanged: () => events.emit({ type: "skills_changed" }),
+	});
 	const memory = new MemoryStore();
 	const profiles = new ProfileService(ctx, { tools, skills, memory, extensions });
 	profiles.seedIfEmpty();
@@ -102,9 +127,13 @@ export async function createServices(ctx: AppContext): Promise<Services> {
 		hub,
 		search,
 		tools,
+		httpTools,
+		uploads: new UploadService(ctx),
 		extensions,
 		profiles,
 		skills,
+		skillWrites,
+		skillTests: new SkillTestRunner(ctx, () => services),
 		memory,
 		workspaces: new WorkspaceService(ctx, {
 			onTrustChanged: (workspaceId) => {

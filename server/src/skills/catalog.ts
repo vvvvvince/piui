@@ -5,6 +5,7 @@ import { basename, dirname, join } from "node:path";
 import type { Principal, SkillSummary } from "@piui/shared";
 import type { AppContext } from "../context.js";
 import type { SkillRow } from "../db/repositories/skills.js";
+import { parseFrontmatter, type SkillFrontmatter } from "./validate.js";
 
 /** A resolved pi skill (spec/03-profiles.md §3) — structural, so nothing here imports pi. */
 export interface PiSkill {
@@ -15,29 +16,7 @@ export interface PiSkill {
 	source: "custom";
 }
 
-export interface SkillFrontmatter {
-	name?: string;
-	description?: string;
-	unknownKeys: string[];
-}
-
-/** Minimal YAML: `key: value` pairs, which is all the Agent Skills standard puts here. */
-export function parseFrontmatter(source: string): SkillFrontmatter | undefined {
-	if (!source.startsWith("---")) return undefined;
-	const end = source.indexOf("\n---", 3);
-	if (end === -1) return undefined;
-	const out: SkillFrontmatter = { unknownKeys: [] };
-	for (const line of source.slice(4, end).split("\n")) {
-		const match = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line.trim());
-		if (!match) continue;
-		const [, key, rawValue] = match;
-		const value = (rawValue ?? "").replace(/^["']|["']$/g, "").trim();
-		if (key === "name") out.name = value;
-		else if (key === "description") out.description = value;
-		else out.unknownKeys.push(key!);
-	}
-	return out;
-}
+export { parseFrontmatter, type SkillFrontmatter } from "./validate.js";
 
 /** A discovery root: every subdirectory holding a SKILL.md becomes a catalog entry. */
 interface SkillRoot {

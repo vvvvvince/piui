@@ -41,6 +41,9 @@ function stubFetch(handler: (url: string, init?: RequestInit) => Response) {
 	return mock;
 }
 
+/** The HTTP-tool list is a second query on this page; every stub must answer it. */
+const HTTP_TOOLS = { items: [] };
+
 const jsonResponse = (body: unknown, status = 200): Response =>
 	new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
@@ -59,7 +62,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("ToolsPage", () => {
 	it("[05-skills-and-tools#B.2] shows the provider status and the catalog grouped by kind", async () => {
-		stubFetch(() => jsonResponse(TOOLS));
+		stubFetch((url) => jsonResponse(url.includes("/tools/http") ? HTTP_TOOLS : TOOLS));
 		renderPage();
 
 		expect(await screen.findByText(/brave/i)).toBeTruthy();
@@ -82,7 +85,7 @@ describe("ToolsPage", () => {
 					],
 				});
 			}
-			return jsonResponse(TOOLS);
+			return jsonResponse(url.includes("/tools/http") ? HTTP_TOOLS : TOOLS);
 		});
 		renderPage();
 
@@ -104,6 +107,7 @@ describe("ToolsPage", () => {
 					503,
 				);
 			}
+			if (url.includes("/tools/http")) return jsonResponse(HTTP_TOOLS);
 			return jsonResponse({ ...TOOLS, webSearch: { provider: "none", configured: false } });
 		});
 		renderPage();
@@ -120,7 +124,7 @@ describe("ToolsPage", () => {
 				seen.push({ url, body: JSON.parse(String(init.body)) });
 				return jsonResponse({ ...TOOLS.items[0], enabled: false });
 			}
-			return jsonResponse(TOOLS);
+			return jsonResponse(url.includes("/tools/http") ? HTTP_TOOLS : TOOLS);
 		});
 		renderPage();
 

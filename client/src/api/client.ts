@@ -12,10 +12,14 @@ import type {
 	CreateConversationRequest,
 	CreateConversationResponse,
 	CreateExtensionRequest,
+	CreateHttpToolRequest,
 	CreateProfileRequest,
+	CreateSkillRequest,
 	CreateWorkspaceRequest,
 	DeleteExtensionResponse,
+	DeleteHttpToolResponse,
 	DeleteProfileResponse,
+	DeleteSkillResponse,
 	DeleteWorkspaceResponse,
 	ExtensionDetail,
 	ExtensionRescanResponse,
@@ -24,6 +28,8 @@ import type {
 	FetchExtensionResponse,
 	FsBrowseResponse,
 	HealthResponse,
+	HttpToolDetail,
+	HttpToolTestResponse,
 	LoginResponse,
 	MeResponse,
 	MessagesResponse,
@@ -31,7 +37,9 @@ import type {
 	ModelsResponse,
 	PatchConversationRequest,
 	PatchExtensionRequest,
+	PatchHttpToolRequest,
 	PatchProfileRequest,
+	PatchSkillRequest,
 	PatchWorkspaceRequest,
 	PostMessageResponse,
 	ProfileDetail,
@@ -44,10 +52,17 @@ import type {
 	ProvidersResponse,
 	QueueResponse,
 	SearchTestResponse,
+	SkillDetail,
+	SkillFileResponse,
+	SkillRescanResponse,
+	SkillSummary,
 	SkillsResponse,
+	SkillTestResponse,
+	SkillValidation,
 	ToolCatalogItem,
 	ToolsResponse,
 	UiResponseRequest,
+	UploadResponse,
 	ValidatePathResponse,
 	VerifyProviderResponse,
 	Workspace,
@@ -143,6 +158,39 @@ async function send<T>(path: string, options: RequestOptions = {}): Promise<T> {
 	return payload as T;
 }
 
+/** Each segment is encoded, so a file name with a space or a `#` survives the round trip. */
+function encodePath(path: string): string {
+	return path.split("/").map(encodeURIComponent).join("/");
+}
+
+/** Multipart POST — the only request that is not JSON (zip import and image uploads). */
+async function upload<T>(
+	path: string,
+	options: { file: File; fields?: Record<string, string> },
+): Promise<T> {
+	const form = new FormData();
+	for (const [key, value] of Object.entries(options.fields ?? {})) form.append(key, value);
+	form.append("file", options.file);
+	const response = await fetch(`/api${path}`, {
+		method: "POST",
+		credentials: "same-origin",
+		headers: { "X-Requested-With": "piui" },
+		body: form,
+	});
+	const text = await response.text();
+	const payload = text.length > 0 ? (JSON.parse(text) as unknown) : undefined;
+	if (!response.ok) {
+		const body = payload as ApiErrorBody | undefined;
+		throw new ApiClientError(
+			body?.error?.code ?? "internal_error",
+			body?.error?.message ?? `Upload failed with status ${response.status}.`,
+			response.status,
+			body?.error?.details,
+		);
+	}
+	return payload as T;
+}
+
 export const api = {
 	health: () => request<HealthResponse>("/health"),
 	meta: () => request<MetaResponse>("/meta"),
@@ -179,6 +227,18 @@ export const api = {
 	testSearch: (query: string) =>
 		request<SearchTestResponse>("/tools/web_search/test", { method: "POST", body: { query } }),
 
+	// spec/05-skills-and-tools.md §B.2 — HTTP tools (admin-only surface).
+	httpTools: () => request<{ items: HttpToolDetail[] }>("/tools/http"),
+	httpTool: (id: string) => request<HttpToolDetail>(`/tools/http/${id}`),
+	createHttpTool: (body: CreateHttpToolRequest) =>
+		request<HttpToolDetail>("/tools/http", { method: "POST", body }),
+	patchHttpTool: (id: string, body: PatchHttpToolRequest) =>
+		request<HttpToolDetail>(`/tools/http/${id}`, { method: "PATCH", body }),
+	deleteHttpTool: (id: string) =>
+		request<DeleteHttpToolResponse>(`/tools/http/${id}`, { method: "DELETE" }),
+	testHttpTool: (id: string, params: Record<string, unknown>) =>
+		request<HttpToolTestResponse>(`/tools/http/${id}/test`, { method: "POST", body: { params } }),
+
 	// --------------------------------------------------------------- profiles
 	profiles: () => request<ProfilesResponse>("/profiles"),
 	profile: (id: string) => request<ProfileDetail>(`/profiles/${id}`),
@@ -194,7 +254,35 @@ export const api = {
 	putProfileMemory: (id: string, content: string) =>
 		request<{ sizeBytes: number }>(`/profiles/${id}/memory`, { method: "PUT", body: { content } }),
 	clearProfileMemory: (id: string) => request<void>(`/profiles/${id}/memory`, { method: "DELETE" }),
+	// ----------------------------------------------------------------- skills
 	skills: () => request<SkillsResponse>("/skills"),
+	skill: (id: string) => request<SkillDetail>(`/skills/${id}`),
+	createSkill: (body: CreateSkillRequest) =>
+		request<SkillSummary>("/skills", { method: "POST", body }),
+	patchSkill: (id: string, body: PatchSkillRequest) =>
+		request<SkillSummary>(`/skills/${id}`, { method: "PATCH", body }),
+	deleteSkill: (id: string) => request<DeleteSkillResponse>(`/skills/${id}`, { method: "DELETE" }),
+	validateSkill: (id: string) =>
+		request<SkillValidation>(`/skills/${id}/validate`, { method: "POST" }),
+	testSkill: (id: string, body: { allowBash?: boolean } = {}) =>
+		request<SkillTestResponse>(`/skills/${id}/test`, { method: "POST", body }),
+	skillFile: (id: string, path: string) =>
+		request<SkillFileResponse>(`/skills/${id}/files/${encodePath(path)}`),
+	putSkillFile: (id: string, path: string, content: string) =>
+		request<{ path: string; size: number }>(`/skills/${id}/files/${encodePath(path)}`, {
+			method: "PUT",
+			body: { content },
+		}),
+	deleteSkillFile: (id: string, path: string) =>
+		request<{ ok: true }>(`/skills/${id}/files/${encodePath(path)}`, { method: "DELETE" }),
+	rescanSkills: () => request<SkillRescanResponse>("/skills/rescan", { method: "POST" }),
+	importSkill: (body: { path?: string; skillMd?: string }) =>
+		request<SkillSummary>("/skills/import", { method: "POST", body }),
+	importSkillZip: (file: File) => upload<SkillSummary>("/skills/import-zip", { file }),
+
+	// ---------------------------------------------------------------- uploads
+	upload: (conversationId: string, file: File) =>
+		upload<UploadResponse>("/uploads", { file, fields: { conversationId } }),
 
 	// ------------------------------------------------------------- workspaces
 	workspaces: () => request<WorkspacesResponse>("/workspaces"),
@@ -232,8 +320,14 @@ export const api = {
 	patchConversation: (id: string, body: PatchConversationRequest) =>
 		request<ConversationDetail>(`/conversations/${id}`, { method: "PATCH", body }),
 	deleteConversation: (id: string) => request<void>(`/conversations/${id}`, { method: "DELETE" }),
-	sendMessage: (id: string, body: { text: string; streamingBehavior?: "steer" | "followUp" }) =>
-		request<PostMessageResponse>(`/conversations/${id}/messages`, { method: "POST", body }),
+	sendMessage: (
+		id: string,
+		body: {
+			text: string;
+			streamingBehavior?: "steer" | "followUp";
+			attachments?: { uploadId?: string; mimeType?: string; data?: string }[];
+		},
+	) => request<PostMessageResponse>(`/conversations/${id}/messages`, { method: "POST", body }),
 	abortConversation: (id: string) =>
 		request<AbortResponse>(`/conversations/${id}/abort`, { method: "POST" }),
 	clearQueue: (id: string) =>

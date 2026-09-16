@@ -1,5 +1,5 @@
 // spec/15-commands-and-input.md §4 — pi's editor semantics in a browser.
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Composer, type ComposerHandlers } from "./Composer.js";
@@ -115,5 +115,66 @@ describe("Composer", () => {
 		// Stop button (Esc) and the queue hint are visible while streaming
 		expect(screen.getByRole("button", { name: /stop/i })).toBeInTheDocument();
 		expect(screen.getByText(/Enter steers/i)).toBeInTheDocument();
+	});
+});
+
+describe("Composer attachments", () => {
+	it("[07-chat-mode#6.4] uploads a pasted image and sends it with the next prompt", async () => {
+		const onSend = vi.fn();
+		const onUpload = vi.fn(async () => ({
+			uploadId: "abc.png",
+			url: "/api/uploads/c1/abc.png",
+			mimeType: "image/png",
+		}));
+		render(
+			<Composer
+				conversationId="c1"
+				streaming={false}
+				imagesSupported
+				onUpload={onUpload}
+				handlers={{
+					onSend,
+					onSteer: vi.fn(),
+					onFollowUp: vi.fn(),
+					onAbort: async () => "",
+					onDequeue: async () => "",
+				}}
+			/>,
+		);
+
+		const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "p.png", {
+			type: "image/png",
+		});
+		await userEvent.upload(screen.getByTestId("composer-file-input"), file);
+		await waitFor(() => expect(onUpload).toHaveBeenCalled());
+		expect(await screen.findByTestId("composer-attachments")).toBeInTheDocument();
+
+		const area = screen.getByLabelText("Message");
+		await userEvent.type(area, "what is this?");
+		await userEvent.keyboard("{Enter}");
+
+		expect(onSend).toHaveBeenCalledWith("what is this?", [
+			{ uploadId: "abc.png", url: "/api/uploads/c1/abc.png", mimeType: "image/png" },
+		]);
+		// The tray is cleared after sending, so the next prompt does not re-attach it.
+		expect(screen.queryByTestId("composer-attachments")).toBeNull();
+	});
+
+	it("[07-chat-mode#6.4] disables the attach button for a model without image input", () => {
+		render(
+			<Composer
+				conversationId="c1"
+				streaming={false}
+				imagesSupported={false}
+				handlers={{
+					onSend: vi.fn(),
+					onSteer: vi.fn(),
+					onFollowUp: vi.fn(),
+					onAbort: async () => "",
+					onDequeue: async () => "",
+				}}
+			/>,
+		);
+		expect(screen.getByTestId("composer-attach")).toBeDisabled();
 	});
 });

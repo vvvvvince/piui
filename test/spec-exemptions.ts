@@ -3,7 +3,17 @@
 // reviewed at every milestone gate.
 
 /** Milestones whose acceptance lists are enforced by test/spec-coverage.test.ts. */
-export const COMPLETED_MILESTONES = ["M0", "M1", "M2", "M3", "M4", "M5", "M5b", "M5c"] as const;
+export const COMPLETED_MILESTONES = [
+	"M0",
+	"M1",
+	"M2",
+	"M3",
+	"M4",
+	"M5",
+	"M5b",
+	"M5c",
+	"M6",
+] as const;
 
 /** Permanently exempt: manual, environmental, or process criteria. */
 export const exemptions: Record<string, string> = {
@@ -20,14 +30,6 @@ export const exemptions: Record<string, string> = {
  * pending tag belongs to a completed milestone, so this list cannot rot silently.
  */
 export const pending: Record<string, string> = {
-	// 07-chat-mode: web search landed in M3; image attachments may slip to M6 (plan/03 §8).
-	"07-chat-mode#6.4": "M6",
-	// 05-skills-and-tools became due with M3 (its B.5.{1,2} are the M3 gate). The rest of part B
-	// needs HTTP tools, profiles and the skill CRUD surface, which are M6.
-	"05-skills-and-tools#B.5.3": "M6",
-	"05-skills-and-tools#B.5.4": "M6",
-	"05-skills-and-tools#B.5.5": "M6",
-	"05-skills-and-tools#B.5.6": "M6",
 	// 14-credentials §§9.1-9.6, 9.8-9.10 landed in M2; 9.7 in M1.
 	"19-deployment#9.4": "M7",
 	// M4 covers its second half offline (`PIUI_WORKSPACE_ROOTS` refuses a path outside the roots,

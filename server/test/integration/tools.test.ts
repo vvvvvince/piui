@@ -2,6 +2,7 @@
 import type { ApiErrorBody, SearchTestResponse, ToolsResponse } from "@piui/shared";
 import { describe, expect, it } from "vitest";
 import { withTestApp } from "../support/app.js";
+import { withWorkspace } from "../support/workspace.js";
 
 const json = { "content-type": "application/json" };
 
@@ -142,5 +143,76 @@ describe("POST /api/tools/web_search/test", () => {
 				"https://example.com/2",
 			]);
 		}, BRAVE);
+	});
+});
+
+describe("global tool disable", () => {
+	it("[05-skills-and-tools#B.5.4] disabling bash globally strips it from a profile's resolved set", async () => {
+		await withWorkspace(async (ws) => {
+			await withTestApp(
+				async (t) => {
+					const me = t.mint();
+					const profile = await t.app.inject({
+						method: "POST",
+						url: "/api/profiles",
+						headers: { ...me.headers, ...json },
+						payload: { name: "Shell user", toolNames: ["read", "bash"] },
+					});
+					expect(profile.statusCode).toBe(201);
+					const profileId = profile.json<{ id: string }>().id;
+					expect(
+						profile.json<{ resolvedTools: { name: string }[] }>().resolvedTools.map((t) => t.name),
+					).toContain("bash");
+
+					const disabled = await t.app.inject({
+						method: "PATCH",
+						url: "/api/tools/bash",
+						headers: { ...me.headers, ...json },
+						payload: { enabled: false },
+					});
+					expect(disabled.statusCode).toBe(200);
+
+					const after = await t.app.inject({
+						method: "GET",
+						url: `/api/profiles/${profileId}`,
+						headers: me.headers,
+					});
+					const detail = after.json<{
+						resolvedTools: { name: string }[];
+						warnings: string[];
+					}>();
+					expect(detail.resolvedTools.map((tool) => tool.name)).toEqual(["read"]);
+					expect(detail.warnings.join(" ")).toMatch(/disabled globally/i);
+
+					// …and the next conversation's header tool list reflects it.
+					const workspace = await t.app.inject({
+						method: "POST",
+						url: "/api/workspaces",
+						headers: { ...me.headers, ...json },
+						payload: { name: "ws", path: ws.path },
+					});
+					const conversation = await t.app.inject({
+						method: "POST",
+						url: "/api/conversations",
+						headers: { ...me.headers, ...json },
+						payload: {
+							mode: "agent",
+							provider: "piui-fake",
+							modelId: "fake-1",
+							profileId,
+							workspaceId: workspace.json<{ id: string }>().id,
+							title: "no bash",
+						},
+					});
+					expect(conversation.statusCode).toBe(201);
+					expect(
+						conversation
+							.json<{ conversation: { tools: { name: string }[] } }>()
+							.conversation.tools.map((tool) => tool.name),
+					).toEqual(["read"]);
+				},
+				{ env: { PIUI_FAKE_MODEL: "1" } },
+			);
+		});
 	});
 });

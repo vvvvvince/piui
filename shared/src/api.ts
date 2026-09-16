@@ -5,7 +5,9 @@ import type {
 	Principal,
 	Profile,
 	SessionMode,
+	SkillFileEntry,
 	SkillSummary,
+	SkillValidation,
 	ThinkingLevel,
 	ToolCatalogItem,
 	ToolDescriptor,
@@ -41,6 +43,8 @@ export type ApiErrorCode =
 	| "path_escape"
 	| "binary_file"
 	| "skill_invalid"
+	// spec/05-skills-and-tools.md §A.1 — external skills are read-only in piui.
+	| "skill_not_editable"
 	// spec/03-profiles.md §7
 	| "agents_md_too_large"
 	| "tool_name_taken"
@@ -237,6 +241,73 @@ export interface PatchToolRequest {
 
 export interface SearchTestRequest {
 	query: string;
+}
+
+// spec/05-skills-and-tools.md §B.2 — user-defined HTTP tools.
+
+export type HttpToolParamType = "string" | "number" | "boolean" | "string[]";
+
+/** One row of the schema builder; the server turns these into a JSON-Schema object. */
+export interface HttpToolParam {
+	name: string;
+	type: HttpToolParamType;
+	required: boolean;
+	description?: string;
+}
+
+export interface HttpToolDetail {
+	id: string;
+	name: string;
+	label: string;
+	description: string;
+	enabled: boolean;
+	method: "GET" | "POST";
+	urlTemplate: string;
+	/** Values are ALWAYS `"***"`: a stored header value never leaves the server (§B.2). */
+	headers: Record<string, string>;
+	bodyTemplate: string | null;
+	parameters: HttpToolParam[];
+	/** The composed JSON Schema the model sees. */
+	parametersSchema: Record<string, unknown>;
+	timeoutMs: number;
+	usedByProfiles: number;
+}
+
+export interface HttpToolsResponse {
+	items: HttpToolDetail[];
+}
+
+export interface CreateHttpToolRequest {
+	name: string;
+	label?: string;
+	description: string;
+	method?: "GET" | "POST";
+	urlTemplate: string;
+	/** Omit a key to keep the stored value; send `""` to delete it. */
+	headers?: Record<string, string>;
+	bodyTemplate?: string | null;
+	parameters?: HttpToolParam[];
+	/** Advanced mode: a raw JSON-Schema object, used instead of `parameters`. */
+	parametersSchema?: Record<string, unknown>;
+	timeoutMs?: number;
+	enabled?: boolean;
+}
+
+export type PatchHttpToolRequest = Partial<CreateHttpToolRequest>;
+
+export interface HttpToolTestRequest {
+	params?: Record<string, unknown>;
+}
+
+export interface HttpToolTestResponse {
+	status: number;
+	durationMs: number;
+	body: string;
+	truncated: boolean;
+}
+
+export interface DeleteHttpToolResponse {
+	affectedProfiles: string[];
 }
 
 export interface SearchTestResult {
@@ -437,6 +508,71 @@ export interface SkillsResponse {
 	items: SkillSummary[];
 }
 
+/** spec/05-skills-and-tools.md §A.4 — the three starters offered by "New skill". */
+export type SkillTemplate = "basic" | "script" | "reference";
+
+export interface CreateSkillRequest {
+	name: string;
+	description: string;
+	body?: string;
+	template?: SkillTemplate;
+}
+
+export interface PatchSkillRequest {
+	name?: string;
+	description?: string;
+	body?: string;
+	enabled?: boolean;
+	/** Raw mode (§A.4): the whole SKILL.md, still validated before it is written. */
+	raw?: string;
+}
+
+export interface SkillDetail extends SkillSummary {
+	files: SkillFileEntry[];
+	skillMd: { name: string; description: string; body: string; raw: string };
+	validation: SkillValidation;
+	/** External skills are read-only in piui (§A.1). */
+	editable: boolean;
+}
+
+export interface SkillFileResponse {
+	path: string;
+	content: string;
+	size: number;
+}
+
+export interface PutSkillFileRequest {
+	content: string;
+}
+
+export interface DeleteSkillResponse {
+	affectedProfiles: string[];
+}
+
+/** POST /api/skills/import — one of the three shapes of §A.4. */
+export interface ImportSkillRequest {
+	path?: string;
+	skillMd?: string;
+}
+
+export interface SkillRescanResponse {
+	added: number;
+	updated: number;
+	missing: number;
+}
+
+/** POST /api/skills/:id/test (§A.4). */
+export interface SkillTestRequest {
+	allowBash?: boolean;
+	provider?: string;
+	modelId?: string;
+}
+
+export interface SkillTestResponse {
+	conversationId: string;
+	ephemeral: true;
+}
+
 // ------------------------------------------------------------- extensions
 // spec/16-extensions.md §9.
 
@@ -551,9 +687,25 @@ export interface PatchConversationRequest {
 	webSearch?: boolean;
 }
 
+/** spec/09-api.md §10 — an upload id, or a small image inlined as base64. */
+export interface MessageAttachmentInput {
+	uploadId?: string;
+	mimeType?: string;
+	data?: string;
+}
+
 export interface PostMessageRequest {
 	text: string;
 	streamingBehavior?: "steer" | "followUp";
+	attachments?: MessageAttachmentInput[];
+}
+
+/** POST /api/uploads (spec/09-api.md §10). */
+export interface UploadResponse {
+	id: string;
+	url: string;
+	mimeType: string;
+	size: number;
 }
 
 export interface PostMessageResponse {

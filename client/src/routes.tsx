@@ -5,10 +5,10 @@ import { ConversationPage } from "./pages/ConversationPage.js";
 import { ConversationsPage } from "./pages/ConversationsPage.js";
 import { ExtensionsPage } from "./pages/ExtensionsPage.js";
 import { LoginPage } from "./pages/LoginPage.js";
-import { PlaceholderPage } from "./pages/PlaceholderPage.js";
 import { ProfilesPage } from "./pages/ProfilesPage.js";
 import { ProvidersPage } from "./pages/ProvidersPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
+import { SkillsPage } from "./pages/SkillsPage.js";
 import { ToolsPage } from "./pages/ToolsPage.js";
 import { WorkspacesPage } from "./pages/WorkspacesPage.js";
 
@@ -23,7 +23,7 @@ export const routes: RouteObject[] = [
 			{ path: "c/:id", element: <ConversationPage /> },
 			{ path: "profiles", element: <ProfilesPage /> },
 			{ path: "workspaces", element: <WorkspacesPage /> },
-			{ path: "skills", element: <PlaceholderPage title="Skills" milestone="M6" /> },
+			{ path: "skills", element: <SkillsPage /> },
 			{ path: "tools", element: <ToolsPage /> },
 			{ path: "extensions", element: <ExtensionsPage /> },
 			{ path: "settings", element: <SettingsPage /> },
